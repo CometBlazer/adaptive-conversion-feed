@@ -3,8 +3,6 @@
 
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { BlurTextEffect } from "@/components/ui/blur-text-effect";
-import { BgradientAnim } from "@/components/ui/soft-gradient-background-animation";
 import { ANGLE_HUE, ANGLE_LABEL } from "@/lib/product";
 import type { Angle, Card } from "@/types";
 
@@ -15,36 +13,20 @@ function angleHue(angle: string): string {
   return ANGLE_HUE[angle as Angle] ?? "#6B6358";
 }
 
-const ANGLE_GRADIENT: Record<string, [number, number]> = {
-  social_proof: [120, 150],
-  convenience: [220, 250],
-  curiosity: [275, 305],
-  identity: [35, 70],
-  aspiration: [190, 220],
-  cost_savings: [110, 140],
-  fomo: [20, 45],
-  objection_handling: [40, 70],
-  evidence: [215, 245],
-  testimonial: [40, 75],
-};
-
 export function PitchCard({
   card,
   index,
   onCta,
   onScroll,
-  onVisible,
-  onHidden,
+  onActive,
 }: {
   card: Card;
   index: number;
   onCta: (index: number) => void;
   onScroll: (index: number, depth: number) => void;
-  onVisible: (index: number) => void;
-  onHidden: (index: number, direction: "up" | "down") => void;
+  onActive: (index: number) => void;
 }) {
   const sectionRef = useRef<HTMLElement>(null);
-  const lastY = useRef(0);
 
   useEffect(() => {
     const el = sectionRef.current;
@@ -61,49 +43,36 @@ export function PitchCard({
     return () => parent?.removeEventListener("scroll", handler);
   }, [index, onScroll]);
 
+  // When this card is mostly on screen, declare it the active card.
+  // The hook ignores repeats, so firing whenever we cross the threshold is fine.
   useEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
     const obs = new IntersectionObserver(
       ([entry]) => {
-        const y = entry.boundingClientRect.top;
-        const goingDown = y < lastY.current;
-        lastY.current = y;
-        if (entry.isIntersecting && entry.intersectionRatio > 0.55) {
-          onVisible(index);
-        } else if (!entry.isIntersecting) {
-          onHidden(index, goingDown ? "down" : "up");
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+          onActive(index);
         }
       },
-      { threshold: [0, 0.55, 1] }
+      { threshold: [0.6] }
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [index, onVisible, onHidden]);
+  }, [index, onActive]);
 
   const hue = angleHue(card.angle);
-  const [hueA, hueB] = ANGLE_GRADIENT[String(card.angle)] ?? [40, 95];
   const isFirst = index === 0;
+  const tint = index % 2 === 0;
 
   return (
     <section
       ref={sectionRef}
       data-card-index={index}
       className="relative flex h-[100svh] shrink-0 snap-start items-center justify-center overflow-hidden"
+      style={{ backgroundColor: tint ? "#F6F3EC" : "#EFE9DC" }}
     >
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <BgradientAnim hueA={hueA} hueB={hueB} animationDuration={16} />
-      </div>
-
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[120vmin] w-[120vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.10] blur-3xl"
-        style={{ background: `radial-gradient(circle, ${hue} 0%, transparent 65%)` }}
-      />
-
-      {/* top scroll bar */}
       <div className="absolute top-7 left-1/2 -translate-x-1/2">
-        <div className="mx-auto h-8 w-px animate-pulse bg-slatey/40" />
+        <div className="mx-auto h-8 w-px bg-slatey/40" />
       </div>
 
       <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-8 text-center">
@@ -115,35 +84,19 @@ export function PitchCard({
           {angleLabel(card.angle)}
         </span>
 
-        {/* Blur intro ONLY on the very first card; all others render plainly. */}
-        {isFirst ? (
-          <h2 className="mt-8 max-w-3xl font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink sm:text-6xl md:text-7xl">
-            <BlurTextEffect>{card.headline}</BlurTextEffect>
-          </h2>
-        ) : (
-          <h2 className="mt-8 max-w-3xl font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink animate-fade-up sm:text-6xl md:text-7xl">
-            {card.headline}
-          </h2>
-        )}
+        <h2 className="mt-8 max-w-3xl font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink sm:text-6xl md:text-7xl">
+          {card.headline}
+        </h2>
 
-        <p
-          className="mt-7 max-w-2xl font-display text-2xl italic leading-snug text-slatey animate-fade-up sm:text-3xl"
-          style={{ animationDelay: "0.1s", animationFillMode: "both" }}
-        >
+        <p className="mt-7 max-w-2xl font-display text-2xl italic leading-snug text-slatey sm:text-3xl">
           {card.subheadline}
         </p>
 
-        <p
-          className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 animate-fade-up sm:text-xl"
-          style={{ animationDelay: "0.2s", animationFillMode: "both" }}
-        >
+        <p className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 sm:text-xl">
           {card.body}
         </p>
 
-        <div
-          className="mt-12 animate-fade-up"
-          style={{ animationDelay: "0.3s", animationFillMode: "both" }}
-        >
+        <div className="mt-12">
           <Button
             size="lg"
             onClick={() => onCta(index)}
@@ -154,14 +107,13 @@ export function PitchCard({
         </div>
       </div>
 
-      {/* bottom scroll bar + one-time hint */}
       <div className="absolute bottom-7 left-1/2 -translate-x-1/2 text-center">
         {isFirst && (
           <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-slatey">
             scroll
           </div>
         )}
-        <div className="mx-auto h-8 w-px animate-pulse bg-slatey/40" />
+        <div className="mx-auto h-8 w-px bg-slatey/40" />
       </div>
     </section>
   );

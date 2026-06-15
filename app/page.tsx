@@ -2,10 +2,8 @@
 "use client";
 
 import { useRef } from "react";
-import { AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { useSession } from "@/lib/useSession";
-import { useWheelSnap } from "@/lib/useWheelSnap";
 import { IntroScreen } from "@/components/IntroScreen";
 import { PitchCard } from "@/components/PitchCard";
 import { ConvertedScreen } from "@/components/ConvertedScreen";
@@ -17,7 +15,6 @@ const IS_DEV = process.env.NODE_ENV !== "production";
 export default function Home() {
   const s = useSession();
   const feedRef = useRef<HTMLDivElement>(null);
-  useWheelSnap(feedRef, { durationMs: 650, cooldownMs: 120 });
 
   return (
     <main className="relative">
@@ -34,14 +31,12 @@ export default function Home() {
         </header>
       )}
 
-      <AnimatePresence mode="wait">
-        {s.phase === "intro" && <IntroScreen key="intro" onBegin={s.begin} />}
-      </AnimatePresence>
+      {s.phase === "intro" && <IntroScreen onBegin={s.begin} />}
 
       {s.phase === "feed" && (
         <div
           ref={feedRef}
-          className="h-[100svh] snap-y snap-mandatory overflow-y-scroll [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="h-[100svh] snap-y snap-mandatory overflow-y-scroll"
         >
           {s.records.map((r, i) => (
             <PitchCard
@@ -50,8 +45,7 @@ export default function Home() {
               index={i}
               onCta={s.clickCta}
               onScroll={s.onScroll}
-              onVisible={s.onVisible}
-              onHidden={s.onHidden}
+              onActive={s.setActiveCard}
             />
           ))}
 
