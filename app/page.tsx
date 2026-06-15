@@ -22,7 +22,7 @@ export default function Home() {
   return (
     <main className="relative">
       {s.phase === "feed" && (
-        <header className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-paper/60 px-6 py-4 backdrop-blur">
+        <header className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-transparent px-6 py-4">
           <span className="font-display text-lg text-ink">FocusFlow</span>
           <button
             onClick={s.close}
@@ -81,7 +81,6 @@ export default function Home() {
         />
       )}
 
-      {/* Always-available research sidebar (dev only), every phase incl. intro. */}
       {IS_DEV && (
         <ResearchDashboard
           metrics={s.metrics}

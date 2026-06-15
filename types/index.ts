@@ -1,5 +1,4 @@
 // types/index.ts
-// All persuasion angles the system can draw from.
 export const ANGLES = [
   "social_proof",
   "convenience",
@@ -15,7 +14,6 @@ export const ANGLES = [
 
 export type Angle = (typeof ANGLES)[number];
 
-// A single generated persuasive card, as returned by the model.
 export interface Card {
   headline: string;
   subheadline: string;
@@ -25,8 +23,6 @@ export interface Card {
   reasoning_summary: string;
 }
 
-// "advance" = user moved past a section downward. Intentionally NOT a rejection:
-// dwell time disambiguates "not interested" from "reading on before deciding".
 export type ActionType =
   | "view"
   | "advance"
@@ -38,8 +34,9 @@ export interface ActionEvent {
   type: ActionType;
   cardIndex: number;
   angle: string;
-  at: number;        // ms since session start
+  at: number;
   dwellMs?: number;
+  direction?: "up" | "down"; // set on advance (down) and scroll_back (up)
 }
 
 export interface CardRecord {
@@ -49,7 +46,6 @@ export interface CardRecord {
   scrollDepth: number;
   visits: number;
   clickedCta: boolean;
-  apiKeyUsed: boolean; // true if this card came from the live model, false = fallback
 }
 
 export interface AdaptContext {

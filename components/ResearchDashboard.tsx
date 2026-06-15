@@ -38,8 +38,6 @@ export function ResearchDashboard({
 
   const fullPayload = {
     product: PRODUCT,
-    apiKeyUsed: metrics.apiKeyUsedAnywhere,
-    allCardsFromModel: metrics.allCardsFromModel,
     metrics,
   };
 
@@ -77,20 +75,6 @@ export function ResearchDashboard({
             </div>
 
             <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
-              <div
-                className="rounded-lg px-3 py-2 font-mono text-[10px]"
-                style={{
-                  backgroundColor: metrics.apiKeyUsedAnywhere ? "#E5E9FB" : "#F1ECE0",
-                  color: metrics.apiKeyUsedAnywhere ? "#2f4ccc" : "#6B6358",
-                }}
-              >
-                {metrics.allCardsFromModel
-                  ? "Live model (API key in use)."
-                  : metrics.apiKeyUsedAnywhere
-                  ? `Mixed: ${metrics.fallbackCardCount} fallback card(s).`
-                  : "No API key — fallback content."}
-              </div>
-
               <section>
                 <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-slatey">
                   Primary
@@ -165,8 +149,8 @@ export function ResearchDashboard({
                       </div>
                       <div className="mt-0.5 truncate text-slatey">{s.headline}</div>
                       <div className="mt-0.5 text-slatey">
-                        → {s.outcome.replace(/_/g, " ")}
-                        {!s.apiKeyUsed ? " · fallback" : ""}
+                        in {s.arrivedBy} → {s.outcome.replace(/_/g, " ")}
+                        {s.leftBy ? ` (${s.leftBy})` : ""}
                       </div>
                     </div>
                   ))}

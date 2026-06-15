@@ -15,7 +15,6 @@ function angleHue(angle: string): string {
   return ANGLE_HUE[angle as Angle] ?? "#6B6358";
 }
 
-// The two ambient hues drift per angle so each section feels distinct.
 const ANGLE_GRADIENT: Record<string, [number, number]> = {
   social_proof: [120, 150],
   convenience: [220, 250],
@@ -84,6 +83,7 @@ export function PitchCard({
 
   const hue = angleHue(card.angle);
   const [hueA, hueB] = ANGLE_GRADIENT[String(card.angle)] ?? [40, 95];
+  const isFirst = index === 0;
 
   return (
     <section
@@ -91,19 +91,17 @@ export function PitchCard({
       data-card-index={index}
       className="relative flex h-[100svh] shrink-0 snap-start items-center justify-center overflow-hidden"
     >
-      {/* animated oklch wash, per-angle hue */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <BgradientAnim hueA={hueA} hueB={hueB} animationDuration={16} />
       </div>
 
-      {/* soft angle-colored bloom on top of the wash */}
       <div
         aria-hidden
         className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[120vmin] w-[120vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.10] blur-3xl"
         style={{ background: `radial-gradient(circle, ${hue} 0%, transparent 65%)` }}
       />
 
-      {/* top scroll bar (lets the user know they can go up) */}
+      {/* top scroll bar */}
       <div className="absolute top-7 left-1/2 -translate-x-1/2">
         <div className="mx-auto h-8 w-px animate-pulse bg-slatey/40" />
       </div>
@@ -117,34 +115,34 @@ export function PitchCard({
           {angleLabel(card.angle)}
         </span>
 
-        {/* key forces a re-mount per card so the blur-in replays on each new card */}
-        <h2
-          key={`h-${index}`}
-          className="mt-8 font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink sm:text-6xl md:text-7xl"
-        >
-          <BlurTextEffect stagger={0.012}>{card.headline}</BlurTextEffect>
-        </h2>
+        {/* Blur intro ONLY on the very first card; all others render plainly. */}
+        {isFirst ? (
+          <h2 className="mt-8 max-w-3xl font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink sm:text-6xl md:text-7xl">
+            <BlurTextEffect>{card.headline}</BlurTextEffect>
+          </h2>
+        ) : (
+          <h2 className="mt-8 max-w-3xl font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink animate-fade-up sm:text-6xl md:text-7xl">
+            {card.headline}
+          </h2>
+        )}
 
         <p
-          key={`s-${index}`}
-          className="mt-7 max-w-2xl font-display text-2xl italic leading-snug text-slatey sm:text-3xl"
+          className="mt-7 max-w-2xl font-display text-2xl italic leading-snug text-slatey animate-fade-up sm:text-3xl"
+          style={{ animationDelay: "0.1s", animationFillMode: "both" }}
         >
-          <BlurTextEffect stagger={0.008} delay={0.15}>
-            {card.subheadline}
-          </BlurTextEffect>
+          {card.subheadline}
         </p>
 
         <p
-          key={`b-${index}`}
-          className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 sm:text-xl animate-fade-up"
-          style={{ animationDelay: "0.35s", animationFillMode: "both" }}
+          className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 animate-fade-up sm:text-xl"
+          style={{ animationDelay: "0.2s", animationFillMode: "both" }}
         >
           {card.body}
         </p>
 
         <div
           className="mt-12 animate-fade-up"
-          style={{ animationDelay: "0.5s", animationFillMode: "both" }}
+          style={{ animationDelay: "0.3s", animationFillMode: "both" }}
         >
           <Button
             size="lg"
@@ -156,9 +154,9 @@ export function PitchCard({
         </div>
       </div>
 
-      {/* bottom scroll bar + the one-time "scroll" hint on the first card only */}
+      {/* bottom scroll bar + one-time hint */}
       <div className="absolute bottom-7 left-1/2 -translate-x-1/2 text-center">
-        {index === 0 && (
+        {isFirst && (
           <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-slatey">
             scroll
           </div>

@@ -17,10 +17,8 @@ export function useSession() {
   const sessionStart = useRef<number>(Date.now());
   const visibleSince = useRef<Record<number, number>>({});
   const scrollDepth = useRef<Record<number, number>>({});
-  const activeIndex = useRef<number>(0);
+  const activeIndex = useRef<number>(-1); // which card currently counts as "open"
   const generating = useRef(false);
-  // One-way latch: once the session ends (CTA or close), no more terminal
-  // events are logged. Fixes the duplicated end-state / double CTA.
   const terminal = useRef(false);
 
   const since = useCallback(() => Date.now() - sessionStart.current, []);
@@ -54,20 +52,17 @@ export function useSession() {
     };
   }, []);
 
-  const fetchCard = useCallback(
-    async (ctx: AdaptContext): Promise<{ card: Card; usedFallback: boolean }> => {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(ctx),
-      });
-      const data = await res.json();
-      return { card: data.card as Card, usedFallback: Boolean(data.usedFallback) };
-    },
-    []
-  );
+  const fetchCard = useCallback(async (ctx: AdaptContext): Promise<Card> => {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ctx),
+    });
+    const data = await res.json();
+    return data.card as Card;
+  }, []);
 
-  const appendCard = useCallback((card: Card, usedFallback: boolean) => {
+  const appendCard = useCallback((card: Card) => {
     setRecords((prev) => [
       ...prev,
       {
@@ -77,7 +72,6 @@ export function useSession() {
         scrollDepth: 0,
         visits: 0,
         clickedCta: false,
-        apiKeyUsed: !usedFallback,
       },
     ]);
   }, []);
@@ -91,32 +85,30 @@ export function useSession() {
       snapshot = prev;
       return prev;
     });
-    const { card, usedFallback } = await fetchCard(buildContext(snapshot));
-    appendCard(card, usedFallback);
+    const card = await fetchCard(buildContext(snapshot));
+    appendCard(card);
     generating.current = false;
     setPrefetching(false);
   }, [buildContext, fetchCard, appendCard]);
 
   const begin = useCallback(async () => {
     terminal.current = false;
+    activeIndex.current = -1;
     setPhase("feed");
     sessionStart.current = Date.now();
     generating.current = true;
     setPrefetching(true);
-    const { card, usedFallback } = await fetchCard(buildContext([]));
-    appendCard(card, usedFallback);
+    const card = await fetchCard(buildContext([]));
+    appendCard(card);
     generating.current = false;
     setPrefetching(false);
   }, [buildContext, fetchCard, appendCard]);
 
-  // Commit accrued dwell. `keepOpen` leaves the visibleSince marker in place so
-  // the live dwell keeps counting for the still-visible card (used on terminal).
-  const commitDwell = useCallback((index: number, keepOpen = false) => {
+  const commitDwell = useCallback((index: number) => {
     const start = visibleSince.current[index];
     if (start == null) return;
     const dwell = Date.now() - start;
-    if (!keepOpen) delete visibleSince.current[index];
-    else visibleSince.current[index] = Date.now(); // reset baseline, keep counting
+    delete visibleSince.current[index];
     const depth = scrollDepth.current[index] ?? 0;
     setRecords((prev) => {
       if (!prev[index]) return prev;
@@ -133,25 +125,39 @@ export function useSession() {
   const onVisible = useCallback(
     (index: number) => {
       if (terminal.current) return;
+      // Dedupe: ignore a repeat "visible" for the card that's already open.
+      // This kills the Strict-Mode / fast-prefetch double-fire that duplicated steps.
+      if (activeIndex.current === index) return;
       if (visibleSince.current[index] != null) return;
+
+      const direction: "up" | "down" =
+        activeIndex.current === -1 || index > activeIndex.current ? "down" : "up";
+
       visibleSince.current[index] = Date.now();
+      const prevActive = activeIndex.current;
       activeIndex.current = index;
+
       setRecords((prev) => {
         if (!prev[index]) return prev;
         const next = [...prev];
         const wasVisited = next[index].visits > 0;
         next[index] = { ...next[index], visits: next[index].visits + 1 };
-        logEvent({
-          type: wasVisited ? "scroll_back" : "view",
-          cardIndex: index,
-          angle: String(next[index].card.angle),
-        });
+        // First arrival is a plain "view"; coming back up is a "scroll_back".
+        logEvent(
+          wasVisited
+            ? { type: "scroll_back", cardIndex: index, angle: String(next[index].card.angle), direction: "up" }
+            : { type: "view", cardIndex: index, angle: String(next[index].card.angle), direction }
+        );
         return next;
       });
+
+      // Prefetch when the last card opens.
       setRecords((prev) => {
         if (index === prev.length - 1) void prefetchNext();
         return prev;
       });
+
+      void prevActive;
     },
     [logEvent, prefetchNext]
   );
@@ -168,6 +174,7 @@ export function useSession() {
           cardIndex: index,
           angle: String(records[index]?.card.angle ?? ""),
           dwellMs: dwell,
+          direction: "down",
         });
       }
     },
@@ -180,7 +187,7 @@ export function useSession() {
 
   const clickCta = useCallback(
     (index: number) => {
-      if (terminal.current) return; // idempotent: ignore a second CTA fire
+      if (terminal.current) return;
       terminal.current = true;
       const start = visibleSince.current[index];
       const dwell = start != null ? Date.now() - start : 0;
@@ -199,7 +206,7 @@ export function useSession() {
   const close = useCallback(() => {
     if (terminal.current) return;
     terminal.current = true;
-    const idx = activeIndex.current;
+    const idx = activeIndex.current >= 0 ? activeIndex.current : 0;
     const start = visibleSince.current[idx];
     const dwell = start != null ? Date.now() - start : 0;
     commitDwell(idx);
@@ -217,7 +224,7 @@ export function useSession() {
     setEvents([]);
     visibleSince.current = {};
     scrollDepth.current = {};
-    activeIndex.current = 0;
+    activeIndex.current = -1;
     terminal.current = false;
     setPhase("intro");
   }, []);
@@ -225,7 +232,7 @@ export function useSession() {
   useEffect(() => {
     const onLeave = () => {
       if (phase !== "feed" || terminal.current) return;
-      const idx = activeIndex.current;
+      const idx = activeIndex.current >= 0 ? activeIndex.current : 0;
       const start = visibleSince.current[idx];
       const dwell = start != null ? Date.now() - start : 0;
       setEvents((prev) => [
@@ -251,8 +258,6 @@ export function useSession() {
   const exportJson = useCallback(() => {
     const payload = {
       product: PRODUCT,
-      apiKeyUsed: metrics.apiKeyUsedAnywhere,
-      allCardsFromModel: metrics.allCardsFromModel,
       sessionStart: new Date(sessionStart.current).toISOString(),
       records,
       events,
