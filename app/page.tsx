@@ -10,6 +10,7 @@ import { IntroScreen } from "@/components/IntroScreen";
 import { PitchCard } from "@/components/PitchCard";
 import { ConvertedScreen } from "@/components/ConvertedScreen";
 import { EndScreen } from "@/components/EndScreen";
+import { ResearchDashboard } from "@/components/ResearchDashboard";
 
 const IS_DEV = process.env.NODE_ENV !== "production";
 
@@ -77,6 +78,15 @@ export default function Home() {
           onExport={s.exportJson}
           onRestart={s.restart}
           showMetricsOption={IS_DEV}
+        />
+      )}
+
+      {/* Always-available research sidebar (dev only), every phase incl. intro. */}
+      {IS_DEV && (
+        <ResearchDashboard
+          metrics={s.metrics}
+          latestCard={s.records[s.records.length - 1]?.card ?? null}
+          onExport={s.exportJson}
         />
       )}
     </main>

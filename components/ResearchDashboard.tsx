@@ -4,6 +4,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Activity, Download, X } from "lucide-react";
+import { FullJsonBlock } from "@/components/FullJsonBlock";
+import { PRODUCT } from "@/lib/product";
 import type { Card } from "@/types";
 import type { SessionMetrics } from "@/lib/metrics";
 
@@ -33,6 +35,13 @@ export function ResearchDashboard({
   startOpen?: boolean;
 }) {
   const [open, setOpen] = useState(startOpen);
+
+  const fullPayload = {
+    product: PRODUCT,
+    apiKeyUsed: metrics.apiKeyUsedAnywhere,
+    allCardsFromModel: metrics.allCardsFromModel,
+    metrics,
+  };
 
   return (
     <>
@@ -68,6 +77,20 @@ export function ResearchDashboard({
             </div>
 
             <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+              <div
+                className="rounded-lg px-3 py-2 font-mono text-[10px]"
+                style={{
+                  backgroundColor: metrics.apiKeyUsedAnywhere ? "#E5E9FB" : "#F1ECE0",
+                  color: metrics.apiKeyUsedAnywhere ? "#2f4ccc" : "#6B6358",
+                }}
+              >
+                {metrics.allCardsFromModel
+                  ? "Live model (API key in use)."
+                  : metrics.apiKeyUsedAnywhere
+                  ? `Mixed: ${metrics.fallbackCardCount} fallback card(s).`
+                  : "No API key — fallback content."}
+              </div>
+
               <section>
                 <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-slatey">
                   Primary
@@ -125,6 +148,33 @@ export function ResearchDashboard({
 
               <section>
                 <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-slatey">
+                  Step-by-step ({metrics.timeline.length})
+                </h3>
+                <div className="space-y-1.5">
+                  {metrics.timeline.map((s) => (
+                    <div
+                      key={s.step}
+                      className="rounded-lg bg-ink/[0.03] px-2.5 py-2 font-mono text-[10px]"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-ink">
+                          {s.step}. {s.angle.replace(/_/g, " ")}
+                          {s.visitOrder > 1 ? ` (revisit ${s.visitOrder})` : ""}
+                        </span>
+                        <span className="text-slatey">{ms(s.dwellMs)}</span>
+                      </div>
+                      <div className="mt-0.5 truncate text-slatey">{s.headline}</div>
+                      <div className="mt-0.5 text-slatey">
+                        → {s.outcome.replace(/_/g, " ")}
+                        {!s.apiKeyUsed ? " · fallback" : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-slatey">
                   Angles used ({metrics.anglesUsed.length})
                 </h3>
                 <div className="flex flex-wrap gap-1.5">
@@ -175,6 +225,8 @@ export function ResearchDashboard({
                   </div>
                 </section>
               )}
+
+              <FullJsonBlock payload={fullPayload} compact />
             </div>
 
             <div className="border-t border-mist p-3">

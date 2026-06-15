@@ -3,6 +3,8 @@
 
 import { useState } from "react";
 import { ChevronDown, Download } from "lucide-react";
+import { FullJsonBlock } from "@/components/FullJsonBlock";
+import { PRODUCT } from "@/lib/product";
 import type { SessionMetrics, StepOutcome } from "@/lib/metrics";
 
 function ms(n: number | null): string {
@@ -44,9 +46,15 @@ export function MetricsView({
 }) {
   const [openStep, setOpenStep] = useState<number | null>(null);
 
+  const fullPayload = {
+    product: PRODUCT,
+    apiKeyUsed: metrics.apiKeyUsedAnywhere,
+    allCardsFromModel: metrics.allCardsFromModel,
+    metrics,
+  };
+
   return (
     <div className="mx-auto w-full max-w-2xl text-left">
-      {/* API source banner */}
       <div
         className="mb-4 rounded-lg px-3 py-2 font-mono text-[11px]"
         style={{
@@ -78,7 +86,6 @@ export function MetricsView({
         <Stat label="CTA angle" value={metrics.ctaAngle ?? "—"} />
       </div>
 
-      {/* Step-by-step timeline */}
       <h3 className="mb-2 mt-7 font-mono text-[11px] uppercase tracking-[0.16em] text-ember">
         Step-by-step ({metrics.timeline.length})
       </h3>
@@ -121,22 +128,22 @@ export function MetricsView({
               {open && (
                 <div className="border-t border-mist bg-ink/[0.02] px-4 py-3">
                   <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-ink/80">
-                    {JSON.stringify(
-                    {
-                        step: s.step,
-                        order_shown: s.cardIndex + 1,
-                        visit: s.visitOrder,
-                        angle: s.angle,
-                        headline: s.headline,
-                        subheadline: s.subheadline,
-                        body: s.body,
-                        dwell_ms: Math.round(s.dwellMs),
-                        api_key_used: s.apiKeyUsed,
-                        outcome: s.outcome,
-                    },
-                    null,
-                    2
-                    )}
+{JSON.stringify(
+  {
+    step: s.step,
+    order_shown: s.cardIndex + 1,
+    visit: s.visitOrder,
+    angle: s.angle,
+    headline: s.headline,
+    subheadline: s.subheadline,
+    body: s.body,
+    dwell_ms: Math.round(s.dwellMs),
+    api_key_used: s.apiKeyUsed,
+    outcome: s.outcome,
+  },
+  null,
+  2
+)}
                   </pre>
                 </div>
               )}
@@ -145,13 +152,16 @@ export function MetricsView({
         })}
       </div>
 
-      <button
-        onClick={onExport}
-        className="mt-6 inline-flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-2.5 font-mono text-xs text-paper transition hover:bg-ink/90"
-      >
-        <Download className="h-3.5 w-3.5" />
-        Export full session JSON
-      </button>
+      <div className="mt-6 flex flex-col gap-3">
+        <FullJsonBlock payload={fullPayload} />
+        <button
+          onClick={onExport}
+          className="inline-flex items-center justify-center gap-2 self-start rounded-full bg-ink px-5 py-2.5 font-mono text-xs text-paper transition hover:bg-ink/90"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export full session JSON
+        </button>
+      </div>
     </div>
   );
 }
