@@ -19,6 +19,9 @@ export function useSession() {
   const scrollDepth = useRef<Record<number, number>>({});
   const activeIndex = useRef<number>(0);
   const generating = useRef(false);
+  // One-way latch: once the session ends (CTA or close), no more terminal
+  // events are logged. Fixes the duplicated end-state / double CTA.
+  const terminal = useRef(false);
 
   const since = useCallback(() => Date.now() - sessionStart.current, []);
 
@@ -51,7 +54,6 @@ export function useSession() {
     };
   }, []);
 
-  // Returns the card AND whether it came from the live model.
   const fetchCard = useCallback(
     async (ctx: AdaptContext): Promise<{ card: Card; usedFallback: boolean }> => {
       const res = await fetch("/api/generate", {
@@ -81,7 +83,7 @@ export function useSession() {
   }, []);
 
   const prefetchNext = useCallback(async () => {
-    if (generating.current) return;
+    if (generating.current || terminal.current) return;
     generating.current = true;
     setPrefetching(true);
     let snapshot: CardRecord[] = [];
@@ -96,6 +98,7 @@ export function useSession() {
   }, [buildContext, fetchCard, appendCard]);
 
   const begin = useCallback(async () => {
+    terminal.current = false;
     setPhase("feed");
     sessionStart.current = Date.now();
     generating.current = true;
@@ -106,11 +109,14 @@ export function useSession() {
     setPrefetching(false);
   }, [buildContext, fetchCard, appendCard]);
 
-  const commitDwell = useCallback((index: number) => {
+  // Commit accrued dwell. `keepOpen` leaves the visibleSince marker in place so
+  // the live dwell keeps counting for the still-visible card (used on terminal).
+  const commitDwell = useCallback((index: number, keepOpen = false) => {
     const start = visibleSince.current[index];
     if (start == null) return;
     const dwell = Date.now() - start;
-    delete visibleSince.current[index];
+    if (!keepOpen) delete visibleSince.current[index];
+    else visibleSince.current[index] = Date.now(); // reset baseline, keep counting
     const depth = scrollDepth.current[index] ?? 0;
     setRecords((prev) => {
       if (!prev[index]) return prev;
@@ -126,6 +132,7 @@ export function useSession() {
 
   const onVisible = useCallback(
     (index: number) => {
+      if (terminal.current) return;
       if (visibleSince.current[index] != null) return;
       visibleSince.current[index] = Date.now();
       activeIndex.current = index;
@@ -151,6 +158,7 @@ export function useSession() {
 
   const onHidden = useCallback(
     (index: number, direction: "up" | "down") => {
+      if (terminal.current) return;
       const start = visibleSince.current[index];
       const dwell = start != null ? Date.now() - start : 0;
       commitDwell(index);
@@ -172,11 +180,16 @@ export function useSession() {
 
   const clickCta = useCallback(
     (index: number) => {
+      if (terminal.current) return; // idempotent: ignore a second CTA fire
+      terminal.current = true;
+      const start = visibleSince.current[index];
+      const dwell = start != null ? Date.now() - start : 0;
       commitDwell(index);
       logEvent({
         type: "cta_click",
         cardIndex: index,
         angle: String(records[index]?.card.angle ?? ""),
+        dwellMs: dwell,
       });
       setPhase("converted");
     },
@@ -184,6 +197,8 @@ export function useSession() {
   );
 
   const close = useCallback(() => {
+    if (terminal.current) return;
+    terminal.current = true;
     const idx = activeIndex.current;
     const start = visibleSince.current[idx];
     const dwell = start != null ? Date.now() - start : 0;
@@ -203,12 +218,13 @@ export function useSession() {
     visibleSince.current = {};
     scrollDepth.current = {};
     activeIndex.current = 0;
+    terminal.current = false;
     setPhase("intro");
   }, []);
 
   useEffect(() => {
     const onLeave = () => {
-      if (phase !== "feed") return;
+      if (phase !== "feed" || terminal.current) return;
       const idx = activeIndex.current;
       const start = visibleSince.current[idx];
       const dwell = start != null ? Date.now() - start : 0;

@@ -77,7 +77,6 @@ function buildTimeline(records: CardRecord[], events: ActionEvent[]): TimelineSt
   let stepNo = 0;
 
   events.forEach((e, i) => {
-    // A step opens when a card becomes visible (view or scroll_back).
     if (e.type !== "view" && e.type !== "scroll_back") return;
     const rec = records[e.cardIndex];
     if (!rec) return;
@@ -85,37 +84,46 @@ function buildTimeline(records: CardRecord[], events: ActionEvent[]): TimelineSt
     stepNo += 1;
     visitCounts[e.cardIndex] = (visitCounts[e.cardIndex] ?? 0) + 1;
 
-    // Find the next event that concerns THIS card index, which closes the step.
     let outcome: StepOutcome = "still_viewing";
     let dwellMs = 0;
+    let found = false;
     for (let j = i + 1; j < events.length; j++) {
       const n = events[j];
       if (n.type === "cta_click" && n.cardIndex === e.cardIndex) {
         outcome = "signed_up";
         dwellMs = n.dwellMs ?? 0;
+        found = true;
         break;
       }
       if (n.type === "leave" && n.cardIndex === e.cardIndex) {
         outcome = "closed";
         dwellMs = n.dwellMs ?? 0;
+        found = true;
         break;
       }
       if (n.type === "advance" && n.cardIndex === e.cardIndex) {
         outcome = "advanced";
         dwellMs = n.dwellMs ?? 0;
+        found = true;
         break;
       }
-      // The card became visible again later, or another card took over without
-      // an explicit advance on this one (e.g. scrolled up away from it).
-      if (
-        (n.type === "view" || n.type === "scroll_back") &&
-        n.cardIndex !== e.cardIndex
-      ) {
+      if ((n.type === "view" || n.type === "scroll_back") && n.cardIndex !== e.cardIndex) {
         outcome = "scrolled_back_away";
-        // best-effort dwell: time until the next card opened
         dwellMs = Math.max(0, n.at - e.at);
+        found = true;
         break;
       }
+    }
+
+    // No closing event: this step is still open (the active card at capture time).
+    // Always show real time spent: prefer the record's accumulated dwell, and if
+    // that's somehow zero, fall back to elapsed-since-shown so it's never 0.
+    if (!found) {
+      dwellMs = rec.dwellMs > 0 ? rec.dwellMs : Math.max(0, (events[events.length - 1]?.at ?? e.at) - e.at);
+    }
+    // Guard: if a closing event reported 0 but the record has real dwell, use it.
+    if (found && dwellMs === 0 && rec.dwellMs > 0) {
+      dwellMs = rec.dwellMs;
     }
 
     steps.push({

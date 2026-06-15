@@ -3,6 +3,8 @@
 
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { BlurTextEffect } from "@/components/ui/blur-text-effect";
+import { BgradientAnim } from "@/components/ui/soft-gradient-background-animation";
 import { ANGLE_HUE, ANGLE_LABEL } from "@/lib/product";
 import type { Angle, Card } from "@/types";
 
@@ -12,6 +14,20 @@ function angleLabel(angle: string): string {
 function angleHue(angle: string): string {
   return ANGLE_HUE[angle as Angle] ?? "#6B6358";
 }
+
+// The two ambient hues drift per angle so each section feels distinct.
+const ANGLE_GRADIENT: Record<string, [number, number]> = {
+  social_proof: [120, 150],
+  convenience: [220, 250],
+  curiosity: [275, 305],
+  identity: [35, 70],
+  aspiration: [190, 220],
+  cost_savings: [110, 140],
+  fomo: [20, 45],
+  objection_handling: [40, 70],
+  evidence: [215, 245],
+  testimonial: [40, 75],
+};
 
 export function PitchCard({
   card,
@@ -67,24 +83,30 @@ export function PitchCard({
   }, [index, onVisible, onHidden]);
 
   const hue = angleHue(card.angle);
-  const tint = index % 2 === 0;
+  const [hueA, hueB] = ANGLE_GRADIENT[String(card.angle)] ?? [40, 95];
 
   return (
     <section
       ref={sectionRef}
       data-card-index={index}
       className="relative flex h-[100svh] shrink-0 snap-start items-center justify-center overflow-hidden"
-      style={{
-        background: tint
-          ? "linear-gradient(180deg, #FBF9F3 0%, #F3EFE6 100%)"
-          : "linear-gradient(180deg, #F6F3EC 0%, #ECE7DA 100%)",
-      }}
     >
+      {/* animated oklch wash, per-angle hue */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <BgradientAnim hueA={hueA} hueB={hueB} animationDuration={16} />
+      </div>
+
+      {/* soft angle-colored bloom on top of the wash */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[120vmin] w-[120vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.08] blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[120vmin] w-[120vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.10] blur-3xl"
         style={{ background: `radial-gradient(circle, ${hue} 0%, transparent 65%)` }}
       />
+
+      {/* top scroll bar (lets the user know they can go up) */}
+      <div className="absolute top-7 left-1/2 -translate-x-1/2">
+        <div className="mx-auto h-8 w-px animate-pulse bg-slatey/40" />
+      </div>
 
       <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-8 text-center">
         <span
@@ -95,17 +117,35 @@ export function PitchCard({
           {angleLabel(card.angle)}
         </span>
 
-        <h2 className="mt-8 font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink sm:text-6xl md:text-7xl">
-          {card.headline}
+        {/* key forces a re-mount per card so the blur-in replays on each new card */}
+        <h2
+          key={`h-${index}`}
+          className="mt-8 font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink sm:text-6xl md:text-7xl"
+        >
+          <BlurTextEffect stagger={0.012}>{card.headline}</BlurTextEffect>
         </h2>
 
-        <p className="mt-7 max-w-2xl font-display text-2xl italic leading-snug text-slatey sm:text-3xl">
-          {card.subheadline}
+        <p
+          key={`s-${index}`}
+          className="mt-7 max-w-2xl font-display text-2xl italic leading-snug text-slatey sm:text-3xl"
+        >
+          <BlurTextEffect stagger={0.008} delay={0.15}>
+            {card.subheadline}
+          </BlurTextEffect>
         </p>
 
-        <p className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 sm:text-xl">{card.body}</p>
+        <p
+          key={`b-${index}`}
+          className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 sm:text-xl animate-fade-up"
+          style={{ animationDelay: "0.35s", animationFillMode: "both" }}
+        >
+          {card.body}
+        </p>
 
-        <div className="mt-12">
+        <div
+          className="mt-12 animate-fade-up"
+          style={{ animationDelay: "0.5s", animationFillMode: "both" }}
+        >
           <Button
             size="lg"
             onClick={() => onCta(index)}
@@ -116,12 +156,15 @@ export function PitchCard({
         </div>
       </div>
 
-      {index === 0 && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.2em] text-slatey">
-          scroll
-          <div className="mx-auto mt-2 h-8 w-px animate-pulse bg-slatey/50" />
-        </div>
-      )}
+      {/* bottom scroll bar + the one-time "scroll" hint on the first card only */}
+      <div className="absolute bottom-7 left-1/2 -translate-x-1/2 text-center">
+        {index === 0 && (
+          <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-slatey">
+            scroll
+          </div>
+        )}
+        <div className="mx-auto h-8 w-px animate-pulse bg-slatey/40" />
+      </div>
     </section>
   );
 }
