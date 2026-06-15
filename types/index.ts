@@ -1,3 +1,4 @@
+// types/index.ts
 // All persuasion angles the system can draw from.
 export const ANGLES = [
   "social_proof",
@@ -24,26 +25,32 @@ export interface Card {
   reasoning_summary: string;
 }
 
-// User actions that can be logged against a card.
-export type ActionType = "view" | "request_another" | "cta_click" | "leave";
+// User actions that can be logged.
+// "advance" = the user moved past a section downward. This is intentionally
+// NOT framed as a rejection: advancing can mean "not interested" OR "interested,
+// reading on before deciding". Dwell time disambiguates the two.
+export type ActionType =
+  | "view"         // a section entered the viewport (first time)
+  | "advance"      // a section left the viewport downward
+  | "scroll_back"  // user scrolled up to a previous section
+  | "cta_click"
+  | "leave";       // user closed the experiment (X) or the tab
 
 export interface ActionEvent {
   type: ActionType;
   cardIndex: number;
   angle: string;
-  // ms since session start
-  at: number;
-  // ms the card was on screen before this action (for dwell/time-per-card)
-  dwellMs?: number;
+  at: number;        // ms since session start
+  dwellMs?: number;  // visible time accrued for this section at the moment of the event
 }
 
-// One card together with everything we observed about it.
+// One section together with everything we observed about it.
 export interface CardRecord {
   card: Card;
-  shownAt: number; // ms since session start
-  dwellMs: number; // accumulated visible time
+  shownAt: number;     // ms since session start (first time it became visible)
+  dwellMs: number;     // accumulated visible time across all visits
   scrollDepth: number; // 0..1 max fraction of body scrolled
-  requestedAnother: boolean;
+  visits: number;      // how many times it entered the viewport (>1 = revisited)
   clickedCta: boolean;
 }
 
@@ -55,13 +62,13 @@ export interface AdaptContext {
     headline: string;
     dwellMs: number;
     scrollDepth: number;
-    requestedAnother: boolean;
+    revisited: boolean;
   }[];
   anglesUsed: string[];
   stats: {
     cardsSeen: number;
     avgDwellMs: number;
-    fastestRejectMs: number | null;
-    slowestDwellMs: number | null;
+    shortestDwellMs: number | null;
+    longestDwellMs: number | null;
   };
 }

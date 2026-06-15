@@ -1,3 +1,4 @@
+// lib/useSession.ts
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -5,20 +6,19 @@ import { PRODUCT } from "@/lib/product";
 import { computeMetrics } from "@/lib/metrics";
 import type { ActionEvent, AdaptContext, Card, CardRecord } from "@/types";
 
-type Phase = "intro" | "feed" | "converted";
+type Phase = "intro" | "feed" | "converted" | "ended";
 
 export function useSession() {
   const [phase, setPhase] = useState<Phase>("intro");
   const [records, setRecords] = useState<CardRecord[]>([]);
   const [events, setEvents] = useState<ActionEvent[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [prefetching, setPrefetching] = useState(false);
 
   const sessionStart = useRef<number>(Date.now());
-  const cardShownAt = useRef<number>(Date.now());
-  const scrollDepthRef = useRef<number>(0);
-
-  const current = records[records.length - 1] ?? null;
-  const currentIndex = records.length - 1;
+  const visibleSince = useRef<Record<number, number>>({});
+  const scrollDepth = useRef<Record<number, number>>({});
+  const activeIndex = useRef<number>(0);
+  const generating = useRef(false);
 
   const since = useCallback(() => Date.now() - sessionStart.current, []);
 
@@ -29,46 +29,27 @@ export function useSession() {
     [since]
   );
 
-  // Commit accumulated dwell + scroll to the current record.
-  const flushDwell = useCallback(() => {
-    const dwell = Date.now() - cardShownAt.current;
-    const depth = scrollDepthRef.current;
-    setRecords((prev) => {
-      if (prev.length === 0) return prev;
-      const next = [...prev];
-      const last = { ...next[next.length - 1] };
-      last.dwellMs += dwell;
-      last.scrollDepth = Math.max(last.scrollDepth, depth);
-      next[next.length - 1] = last;
-      return next;
-    });
-    return dwell;
+  const buildContext = useCallback((recs: CardRecord[]): AdaptContext => {
+    const anglesUsed = recs.map((r) => String(r.card.angle));
+    const dwells = recs.map((r) => r.dwellMs);
+    return {
+      product: { name: PRODUCT.name, tagline: PRODUCT.tagline, cta: PRODUCT.cta },
+      history: recs.map((r) => ({
+        angle: String(r.card.angle),
+        headline: r.card.headline,
+        dwellMs: r.dwellMs,
+        scrollDepth: r.scrollDepth,
+        revisited: r.visits > 1,
+      })),
+      anglesUsed,
+      stats: {
+        cardsSeen: recs.length,
+        avgDwellMs: dwells.length ? dwells.reduce((a, b) => a + b, 0) / dwells.length : 0,
+        shortestDwellMs: dwells.length ? Math.min(...dwells) : null,
+        longestDwellMs: dwells.length ? Math.max(...dwells) : null,
+      },
+    };
   }, []);
-
-  const buildContext = useCallback(
-    (recs: CardRecord[]): AdaptContext => {
-      const anglesUsed = recs.map((r) => String(r.card.angle));
-      const dwells = recs.map((r) => r.dwellMs);
-      return {
-        product: { name: PRODUCT.name, tagline: PRODUCT.tagline, cta: PRODUCT.cta },
-        history: recs.map((r) => ({
-          angle: String(r.card.angle),
-          headline: r.card.headline,
-          dwellMs: r.dwellMs,
-          scrollDepth: r.scrollDepth,
-          requestedAnother: r.requestedAnother,
-        })),
-        anglesUsed,
-        stats: {
-          cardsSeen: recs.length,
-          avgDwellMs: dwells.length ? dwells.reduce((a, b) => a + b, 0) / dwells.length : 0,
-          fastestRejectMs: dwells.length ? Math.min(...dwells) : null,
-          slowestDwellMs: dwells.length ? Math.max(...dwells) : null,
-        },
-      };
-    },
-    []
-  );
 
   const fetchCard = useCallback(async (ctx: AdaptContext): Promise<Card> => {
     const res = await fetch("/api/generate", {
@@ -80,96 +61,169 @@ export function useSession() {
     return data.card as Card;
   }, []);
 
-  const pushCard = useCallback((card: Card) => {
-    cardShownAt.current = Date.now();
-    scrollDepthRef.current = 0;
+  const appendCard = useCallback((card: Card) => {
     setRecords((prev) => [
       ...prev,
-      { card, shownAt: Date.now() - sessionStart.current, dwellMs: 0, scrollDepth: 0, requestedAnother: false, clickedCta: false },
+      {
+        card,
+        shownAt: Date.now() - sessionStart.current,
+        dwellMs: 0,
+        scrollDepth: 0,
+        visits: 0,
+        clickedCta: false,
+      },
     ]);
   }, []);
 
+  const prefetchNext = useCallback(async () => {
+    if (generating.current) return;
+    generating.current = true;
+    setPrefetching(true);
+    let snapshot: CardRecord[] = [];
+    setRecords((prev) => {
+      snapshot = prev;
+      return prev;
+    });
+    const card = await fetchCard(buildContext(snapshot));
+    appendCard(card);
+    generating.current = false;
+    setPrefetching(false);
+  }, [buildContext, fetchCard, appendCard]);
+
   const begin = useCallback(async () => {
     setPhase("feed");
-    setLoading(true);
     sessionStart.current = Date.now();
+    generating.current = true;
+    setPrefetching(true);
     const card = await fetchCard(buildContext([]));
-    pushCard(card);
-    logEvent({ type: "view", cardIndex: 0, angle: String(card.angle) });
-    setLoading(false);
-  }, [buildContext, fetchCard, pushCard, logEvent]);
+    appendCard(card);
+    generating.current = false;
+    setPrefetching(false);
+  }, [buildContext, fetchCard, appendCard]);
 
-  const requestAnother = useCallback(async () => {
-    if (loading || !current) return;
-    setLoading(true);
-    const dwell = Date.now() - cardShownAt.current;
-    const depth = scrollDepthRef.current;
-    logEvent({
-      type: "request_another",
-      cardIndex: currentIndex,
-      angle: String(current.card.angle),
-      dwellMs: dwell,
+  const commitDwell = useCallback((index: number) => {
+    const start = visibleSince.current[index];
+    if (start == null) return;
+    const dwell = Date.now() - start;
+    delete visibleSince.current[index];
+    const depth = scrollDepth.current[index] ?? 0;
+    setRecords((prev) => {
+      if (!prev[index]) return prev;
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        dwellMs: next[index].dwellMs + dwell,
+        scrollDepth: Math.max(next[index].scrollDepth, depth),
+      };
+      return next;
     });
-    // Commit dwell + scroll and mark the current card as having requested another (single update).
-    const updated = records.map((r, i) =>
-      i === records.length - 1
-        ? {
-            ...r,
-            requestedAnother: true,
-            dwellMs: r.dwellMs + dwell,
-            scrollDepth: Math.max(r.scrollDepth, depth),
-          }
-        : r
-    );
-    setRecords(updated);
-    const card = await fetchCard(buildContext(updated));
-    pushCard(card);
-    logEvent({ type: "view", cardIndex: updated.length, angle: String(card.angle) });
-    setLoading(false);
-  }, [loading, current, currentIndex, logEvent, records, buildContext, fetchCard, pushCard]);
-
-  const clickCta = useCallback(() => {
-    if (!current) return;
-    const dwell = flushDwell();
-    logEvent({
-      type: "cta_click",
-      cardIndex: currentIndex,
-      angle: String(current.card.angle),
-      dwellMs: dwell,
-    });
-    setPhase("converted");
-  }, [current, currentIndex, flushDwell, logEvent]);
-
-  const setScrollDepth = useCallback((depth: number) => {
-    scrollDepthRef.current = Math.max(scrollDepthRef.current, depth);
   }, []);
+
+  const onVisible = useCallback(
+    (index: number) => {
+      if (visibleSince.current[index] != null) return;
+      visibleSince.current[index] = Date.now();
+      activeIndex.current = index;
+      setRecords((prev) => {
+        if (!prev[index]) return prev;
+        const next = [...prev];
+        const wasVisited = next[index].visits > 0;
+        next[index] = { ...next[index], visits: next[index].visits + 1 };
+        logEvent({
+          type: wasVisited ? "scroll_back" : "view",
+          cardIndex: index,
+          angle: String(next[index].card.angle),
+        });
+        return next;
+      });
+      setRecords((prev) => {
+        if (index === prev.length - 1) void prefetchNext();
+        return prev;
+      });
+    },
+    [logEvent, prefetchNext]
+  );
+
+  const onHidden = useCallback(
+    (index: number, direction: "up" | "down") => {
+      const start = visibleSince.current[index];
+      const dwell = start != null ? Date.now() - start : 0;
+      commitDwell(index);
+      // Advancing downward is logged neutrally (engaged vs quick is derived from dwell).
+      if (direction === "down") {
+        logEvent({
+          type: "advance",
+          cardIndex: index,
+          angle: String(records[index]?.card.angle ?? ""),
+          dwellMs: dwell,
+        });
+      }
+    },
+    [commitDwell, logEvent, records]
+  );
+
+  const onScroll = useCallback((index: number, depth: number) => {
+    scrollDepth.current[index] = Math.max(scrollDepth.current[index] ?? 0, depth);
+  }, []);
+
+  const clickCta = useCallback(
+    (index: number) => {
+      commitDwell(index);
+      logEvent({
+        type: "cta_click",
+        cardIndex: index,
+        angle: String(records[index]?.card.angle ?? ""),
+      });
+      setPhase("converted");
+    },
+    [commitDwell, logEvent, records]
+  );
+
+  // X button: log a leave against the active section, then show the end screen.
+  const close = useCallback(() => {
+    const idx = activeIndex.current;
+    const start = visibleSince.current[idx];
+    const dwell = start != null ? Date.now() - start : 0;
+    commitDwell(idx);
+    logEvent({
+      type: "leave",
+      cardIndex: idx,
+      angle: String(records[idx]?.card.angle ?? ""),
+      dwellMs: dwell,
+    });
+    setPhase("ended");
+  }, [commitDwell, logEvent, records]);
 
   const restart = useCallback(() => {
     setRecords([]);
     setEvents([]);
+    visibleSince.current = {};
+    scrollDepth.current = {};
+    activeIndex.current = 0;
     setPhase("intro");
   }, []);
 
-  // Log a "leave" on tab close / navigation away.
+  // Tab close still logs a leave (best-effort).
   useEffect(() => {
     const onLeave = () => {
-      if (phase === "feed" && current) {
-        const dwell = Date.now() - cardShownAt.current;
-        setEvents((prev) => [
-          ...prev,
-          {
-            type: "leave",
-            cardIndex: records.length - 1,
-            angle: String(current.card.angle),
-            at: Date.now() - sessionStart.current,
-            dwellMs: dwell,
-          },
-        ]);
-      }
+      if (phase !== "feed") return;
+      const idx = activeIndex.current;
+      const start = visibleSince.current[idx];
+      const dwell = start != null ? Date.now() - start : 0;
+      setEvents((prev) => [
+        ...prev,
+        {
+          type: "leave",
+          cardIndex: idx,
+          angle: String(records[idx]?.card.angle ?? ""),
+          at: Date.now() - sessionStart.current,
+          dwellMs: dwell,
+        },
+      ]);
     };
     window.addEventListener("beforeunload", onLeave);
     return () => window.removeEventListener("beforeunload", onLeave);
-  }, [phase, current, records.length]);
+  }, [phase, records]);
 
   const metrics = useMemo(
     () => computeMetrics(records, events, sessionStart.current, Date.now()),
@@ -196,14 +250,14 @@ export function useSession() {
   return {
     phase,
     records,
-    current,
-    currentIndex,
-    loading,
+    prefetching,
     metrics,
     begin,
-    requestAnother,
+    onVisible,
+    onHidden,
+    onScroll,
     clickCta,
-    setScrollDepth,
+    close,
     restart,
     exportJson,
   };

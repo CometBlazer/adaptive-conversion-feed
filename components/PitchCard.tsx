@@ -1,8 +1,7 @@
+// components/PitchCard.tsx
 "use client";
 
 import { useEffect, useRef } from "react";
-import { motion } from "framer-motion";
-import { ArrowRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ANGLE_HUE, ANGLE_LABEL } from "@/lib/product";
 import type { Angle, Card } from "@/types";
@@ -17,72 +16,118 @@ function angleHue(angle: string): string {
 export function PitchCard({
   card,
   index,
-  loading,
   onCta,
-  onAnother,
   onScroll,
+  onVisible,
+  onHidden,
 }: {
   card: Card;
   index: number;
-  loading: boolean;
-  onCta: () => void;
-  onAnother: () => void;
-  onScroll: (depth: number) => void;
+  onCta: (index: number) => void;
+  onScroll: (index: number, depth: number) => void;
+  onVisible: (index: number) => void;
+  onHidden: (index: number, direction: "up" | "down") => void;
 }) {
-  const bodyRef = useRef<HTMLDivElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const lastY = useRef(0);
 
-  // Track max scroll depth within the card body.
+  // Track read-depth of the section via window-relative scroll position.
   useEffect(() => {
-    const el = bodyRef.current;
+    const el = sectionRef.current;
     if (!el) return;
     const handler = () => {
-      const max = el.scrollHeight - el.clientHeight;
-      const depth = max > 0 ? Math.min(1, el.scrollTop / max) : 1;
-      onScroll(depth);
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight;
+      // Fraction of the section that has scrolled above the fold.
+      const scrolled = Math.min(1, Math.max(0, (vh - rect.top) / Math.max(rect.height, 1)));
+      onScroll(index, scrolled);
     };
     handler();
-    el.addEventListener("scroll", handler, { passive: true });
-    return () => el.removeEventListener("scroll", handler);
-  }, [card, onScroll]);
+    window.addEventListener("scroll", handler, { passive: true });
+    return () => window.removeEventListener("scroll", handler);
+  }, [index, onScroll]);
+
+  // Observe enter/leave with direction.
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        const y = entry.boundingClientRect.top;
+        const goingDown = y < lastY.current;
+        lastY.current = y;
+        if (entry.isIntersecting && entry.intersectionRatio > 0.55) {
+          onVisible(index);
+        } else if (!entry.isIntersecting) {
+          onHidden(index, goingDown ? "down" : "up");
+        }
+      },
+      { threshold: [0, 0.55, 1] }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [index, onVisible, onHidden]);
 
   const hue = angleHue(card.angle);
+  const tint = index % 2 === 0;
 
   return (
-    <motion.article
-      key={index}
-      initial={{ opacity: 0, y: 16, scale: 0.99 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -16, scale: 0.99 }}
-      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-      className="w-full max-w-xl rounded-3xl border border-mist bg-white/80 p-8 shadow-[0_1px_0_rgba(20,17,15,0.04),0_24px_48px_-24px_rgba(20,17,15,0.25)] backdrop-blur sm:p-10"
+    <section
+      ref={sectionRef}
+      data-card-index={index}
+      className="relative flex min-h-[100svh] snap-start items-center overflow-hidden"
+      style={{
+        background: tint
+          ? "linear-gradient(180deg, #FBF9F3 0%, #F3EFE6 100%)"
+          : "linear-gradient(180deg, #F6F3EC 0%, #ECE7DA 100%)",
+      }}
     >
-      <div className="flex items-center justify-between">
+      {/* large ambient angle wash, the section's signature */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-32 top-1/2 h-[120vmin] w-[120vmin] -translate-y-1/2 rounded-full opacity-[0.10] blur-3xl"
+        style={{ background: `radial-gradient(circle, ${hue} 0%, transparent 65%)` }}
+      />
+
+      <div className="relative mx-auto w-full max-w-4xl px-8 sm:px-12">
         <span
-          className="inline-flex items-center gap-2 rounded-full px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em]"
-          style={{ color: hue, backgroundColor: `${hue}14` }}
+          className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.22em]"
+          style={{ color: hue }}
         >
-          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: hue }} />
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: hue }} />
           {angleLabel(card.angle)}
         </span>
-        <span className="font-mono text-[11px] text-slatey">#{index + 1}</span>
+
+        <h2 className="mt-8 font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink sm:text-6xl md:text-7xl">
+          {card.headline}
+        </h2>
+
+        <p className="mt-7 max-w-2xl font-display text-2xl italic leading-snug text-slatey sm:text-3xl">
+          {card.subheadline}
+        </p>
+
+        <p className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 sm:text-xl">
+          {card.body}
+        </p>
+
+        <div className="mt-12">
+          <Button
+            size="lg"
+            onClick={() => onCta(index)}
+            className="h-14 px-9 text-base shadow-[0_18px_40px_-18px_rgba(58,91,224,0.7)]"
+          >
+            Sign up for FocusFlow
+          </Button>
+        </div>
       </div>
 
-      <div ref={bodyRef} className="mt-6 max-h-[44vh] overflow-y-auto pr-1">
-        <h2 className="font-display text-3xl leading-snug text-ink sm:text-4xl">{card.headline}</h2>
-        <p className="mt-3 text-lg text-slatey">{card.subheadline}</p>
-        <p className="mt-5 text-base leading-relaxed text-ink/85">{card.body}</p>
-      </div>
-
-      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Button size="lg" onClick={onCta} disabled={loading} className="sm:flex-1">
-          Start FocusFlow
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-        <Button size="lg" variant="outline" onClick={onAnother} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          {loading ? "Thinking…" : "Show me another reason"}
-        </Button>
-      </div>
-    </motion.article>
+      {/* gentle scroll affordance, only on the first section */}
+      {index === 0 && (
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.2em] text-slatey">
+          scroll
+          <div className="mx-auto mt-2 h-8 w-px animate-pulse bg-slatey/50" />
+        </div>
+      )}
+    </section>
   );
 }

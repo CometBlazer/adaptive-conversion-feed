@@ -1,3 +1,4 @@
+// components/ResearchDashboard.tsx
 "use client";
 
 import { useState } from "react";
@@ -24,12 +25,14 @@ export function ResearchDashboard({
   metrics,
   latestCard,
   onExport,
+  startOpen = false,
 }: {
   metrics: SessionMetrics;
   latestCard: Card | null;
   onExport: () => void;
+  startOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
 
   return (
     <>
@@ -70,29 +73,50 @@ export function ResearchDashboard({
                   Primary
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <Stat
-                    label="Cards before CTA"
-                    value={metrics.cardsViewedBeforeCta ?? "—"}
-                  />
+                  <Stat label="Cards before CTA" value={metrics.cardsViewedBeforeCta ?? "—"} />
                   <Stat label="Converted" value={metrics.ctaConverted ? "yes" : "no"} />
                 </div>
               </section>
 
               <section>
                 <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-slatey">
-                  Secondary
+                  Engagement
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <Stat label="Cards viewed" value={metrics.cardsViewed} />
+                  <Stat label="Sections viewed" value={metrics.cardsViewed} />
                   <Stat label="Session" value={ms(metrics.sessionLengthMs)} />
-                  <Stat label="Avg / card" value={ms(metrics.avgTimePerCardMs)} />
-                  <Stat label="Median / card" value={ms(metrics.medianTimePerCardMs)} />
-                  <Stat label="Fastest reject" value={ms(metrics.fastestRejectMs)} />
-                  <Stat label="Slowest dwell" value={ms(metrics.slowestDwellMs)} />
-                  <Stat label="Avg scroll" value={metrics.avgScrollDepth.toFixed(2)} />
-                  <Stat label="Re-requests" value={metrics.requestAnotherCount} />
+                  <Stat label="Avg / section" value={ms(metrics.avgTimePerCardMs)} />
+                  <Stat label="Median / section" value={ms(metrics.medianTimePerCardMs)} />
+                  <Stat label="Longest dwell" value={ms(metrics.longestDwellMs)} />
+                  <Stat label="Avg read depth" value={metrics.avgScrollDepth.toFixed(2)} />
+                </div>
+              </section>
+
+              <section>
+                <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-slatey">
+                  Advance behavior
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <Stat label="Advances" value={metrics.advanceCount} />
+                  <Stat label="Shortest dwell" value={ms(metrics.shortestDwellBeforeAdvanceMs)} />
+                  <Stat label="Quick (bounced)" value={metrics.quickAdvanceCount} />
+                  <Stat label="Engaged (read on)" value={metrics.engagedAdvanceCount} />
+                </div>
+                <p className="mt-2 font-mono text-[10px] leading-relaxed text-slatey">
+                  Advancing isn&apos;t rejection. Quick = dwell under 4s; engaged = read, then moved
+                  on to gather more before deciding.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-slatey">
+                  Scroll-up behavior
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <Stat label="Scroll-backs" value={metrics.scrollBackCount} />
+                  <Stat label="Revisited sections" value={metrics.revisitedCardCount} />
                   <Stat
-                    label="Drop-off card"
+                    label="Drop-off section"
                     value={metrics.dropOffCardIndex === null ? "—" : metrics.dropOffCardIndex + 1}
                   />
                   <Stat label="CTA angle" value={metrics.ctaAngle ?? "—"} />
@@ -127,7 +151,7 @@ export function ResearchDashboard({
                     >
                       <span className="text-ink">{angle}</span>
                       <span className="text-slatey">
-                        {ms(d.avgDwellMs)} · ×{d.count} · scroll {d.avgScroll.toFixed(2)}
+                        {ms(d.avgDwellMs)} · ×{d.count} · depth {d.avgScroll.toFixed(2)}
                       </span>
                     </div>
                   ))}

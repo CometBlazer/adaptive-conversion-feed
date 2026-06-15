@@ -1,27 +1,37 @@
+// lib/metrics.ts
 import type { ActionEvent, CardRecord } from "@/types";
+
+// Dwell threshold (ms) separating a "quick advance" (bounced off) from an
+// "engaged advance" (read, then moved on to gather more before deciding).
+export const ENGAGED_DWELL_MS = 4000;
 
 export interface SessionMetrics {
   // Primary
   cardsViewedBeforeCta: number | null; // null if no CTA click
-  // Secondary
+  // Conversion
   ctaConverted: boolean;
   sessionLengthMs: number;
   cardsViewed: number;
-  dropOffCardIndex: number | null; // index of last card before a "leave"
+  dropOffCardIndex: number | null; // last section visible before "leave"
   // Angle effectiveness
   anglesUsed: string[];
-  ctaAngle: string | null; // angle of the card that converted
-  // Future / derived
+  ctaAngle: string | null;
+  // Timing
   avgTimePerCardMs: number;
   medianTimePerCardMs: number;
-  fastestRejectMs: number | null; // shortest dwell before request_another
-  slowestDwellMs: number | null;
+  shortestDwellBeforeAdvanceMs: number | null;
+  longestDwellMs: number | null;
   totalDwellMs: number;
   avgScrollDepth: number;
-  requestAnotherCount: number;
-  // Per-angle dwell summary, for effectiveness comparison
+  // Advance behavior (NOT framed as rejection)
+  advanceCount: number;          // total sections advanced past
+  quickAdvanceCount: number;     // advanced with dwell < threshold (bounced off)
+  engagedAdvanceCount: number;   // advanced with dwell >= threshold (read on)
+  // Scroll-up behavior
+  scrollBackCount: number;
+  revisitedCardCount: number;    // distinct sections viewed more than once
+  // Per-angle dwell summary
   dwellByAngle: Record<string, { count: number; avgDwellMs: number; avgScroll: number }>;
-  // Sequence of actions for replay
   actionSequence: { type: string; cardIndex: number; angle: string; at: number }[];
 }
 
@@ -42,8 +52,8 @@ export function computeMetrics(
   const ctaEvent = events.find((e) => e.type === "cta_click");
   const leaveEvent = events.find((e) => e.type === "leave");
 
-  const rejectDwells = events
-    .filter((e) => e.type === "request_another" && typeof e.dwellMs === "number")
+  const advanceDwells = events
+    .filter((e) => e.type === "advance" && typeof e.dwellMs === "number")
     .map((e) => e.dwellMs as number);
 
   const dwellByAngle: SessionMetrics["dwellByAngle"] = {};
@@ -68,13 +78,17 @@ export function computeMetrics(
       ? dwellTimes.reduce((a, b) => a + b, 0) / dwellTimes.length
       : 0,
     medianTimePerCardMs: median(dwellTimes),
-    fastestRejectMs: rejectDwells.length ? Math.min(...rejectDwells) : null,
-    slowestDwellMs: dwellTimes.length ? Math.max(...dwellTimes) : null,
+    shortestDwellBeforeAdvanceMs: advanceDwells.length ? Math.min(...advanceDwells) : null,
+    longestDwellMs: dwellTimes.length ? Math.max(...dwellTimes) : null,
     totalDwellMs: dwellTimes.reduce((a, b) => a + b, 0),
     avgScrollDepth: records.length
       ? records.reduce((a, r) => a + r.scrollDepth, 0) / records.length
       : 0,
-    requestAnotherCount: events.filter((e) => e.type === "request_another").length,
+    advanceCount: advanceDwells.length,
+    quickAdvanceCount: advanceDwells.filter((d) => d < ENGAGED_DWELL_MS).length,
+    engagedAdvanceCount: advanceDwells.filter((d) => d >= ENGAGED_DWELL_MS).length,
+    scrollBackCount: events.filter((e) => e.type === "scroll_back").length,
+    revisitedCardCount: records.filter((r) => r.visits > 1).length,
     dwellByAngle,
     actionSequence: events.map((e) => ({
       type: e.type,
