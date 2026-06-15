@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background-color: #f6f3ec;
+  color: #14110f;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Hairline grid texture for the paper feel, used sparingly on the stage. */
+.stage-grid {
+  background-image: radial-gradient(rgba(20, 17, 15, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
