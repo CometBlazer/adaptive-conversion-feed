@@ -8,6 +8,7 @@ import { IntroScreen } from "@/components/IntroScreen";
 import { PitchCard } from "@/components/PitchCard";
 import { ConvertedScreen } from "@/components/ConvertedScreen";
 import { EndScreen } from "@/components/EndScreen";
+import { LoadingCard } from "@/components/LoadingCard";
 import { ResearchDashboard } from "@/components/ResearchDashboard";
 
 const IS_DEV = process.env.NODE_ENV !== "production";
@@ -34,10 +35,7 @@ export default function Home() {
       {s.phase === "intro" && <IntroScreen onBegin={s.begin} />}
 
       {s.phase === "feed" && (
-        <div
-          ref={feedRef}
-          className="h-[100svh] snap-y snap-mandatory overflow-y-scroll"
-        >
+        <div ref={feedRef} className="h-[100svh] snap-y snap-mandatory overflow-y-scroll">
           {s.records.map((r, i) => (
             <PitchCard
               key={i}
@@ -50,9 +48,7 @@ export default function Home() {
           ))}
 
           {s.prefetching && (
-            <div className="flex h-24 items-center justify-center font-mono text-xs text-slatey">
-              finding another angle…
-            </div>
+            <LoadingCard index={s.records.length} onActive={s.onLoadingActive} />
           )}
         </div>
       )}

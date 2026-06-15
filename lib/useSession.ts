@@ -190,6 +190,28 @@ export function useSession() {
     [addDwell, logEvent, records, prefetchNext]
   );
 
+  // The trailing loading section became active (user out-scrolled the prefetch).
+  // Close out the previous real card's dwell, but don't log a view for the
+  // loader itself — it isn't a card. activeIndex parks at -1 until a real card
+  // takes over, so the next real card logs a correct arrival.
+  const onLoadingActive = useCallback(() => {
+    if (terminal.current) return;
+    const prev = activeIndex.current;
+    if (prev !== -1 && records[prev]) {
+      const dwell = Date.now() - activeSince.current;
+      addDwell(prev, dwell);
+      logEvent({
+        type: "advance",
+        cardIndex: prev,
+        angle: String(records[prev]?.card.angle ?? ""),
+        dwellMs: dwell,
+        direction: "down",
+      });
+    }
+    activeIndex.current = -1;
+    activeSince.current = Date.now();
+  }, [addDwell, logEvent, records]);
+
   const onScroll = useCallback((index: number, depth: number) => {
     scrollDepth.current[index] = Math.max(scrollDepth.current[index] ?? 0, depth);
   }, []);
@@ -283,6 +305,7 @@ export function useSession() {
     metrics,
     begin,
     setActiveCard,
+    onLoadingActive,
     onScroll,
     clickCta,
     close,
