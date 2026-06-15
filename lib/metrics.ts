@@ -5,14 +5,35 @@ import type { ActionEvent, CardRecord } from "@/types";
 // "engaged advance" (read, then moved on to gather more before deciding).
 export const ENGAGED_DWELL_MS = 4000;
 
+// How a given step (a single time a card was on screen) ended.
+export type StepOutcome =
+  | "advanced"           // scrolled down to the next section
+  | "scrolled_back_away" // scrolled up, away from this section
+  | "signed_up"          // clicked the CTA
+  | "closed"             // hit the X / closed the tab
+  | "still_viewing";     // session captured while this was on screen
+
+export interface TimelineStep {
+  step: number;          // 1-based order of this step in the session
+  cardIndex: number;     // which card (0-based); repeats if revisited
+  visitOrder: number;    // 1 = first time seen, 2 = second, ...
+  angle: string;
+  headline: string;
+  subheadline: string;
+  body: string;
+  dwellMs: number;       // time on screen for THIS visit
+  apiKeyUsed: boolean;   // did this card come from the model or the fallback?
+  outcome: StepOutcome;
+}
+
 export interface SessionMetrics {
   // Primary
-  cardsViewedBeforeCta: number | null; // null if no CTA click
+  cardsViewedBeforeCta: number | null;
   // Conversion
   ctaConverted: boolean;
   sessionLengthMs: number;
   cardsViewed: number;
-  dropOffCardIndex: number | null; // last section visible before "leave"
+  dropOffCardIndex: number | null;
   // Angle effectiveness
   anglesUsed: string[];
   ctaAngle: string | null;
@@ -24,14 +45,21 @@ export interface SessionMetrics {
   totalDwellMs: number;
   avgScrollDepth: number;
   // Advance behavior (NOT framed as rejection)
-  advanceCount: number;          // total sections advanced past
-  quickAdvanceCount: number;     // advanced with dwell < threshold (bounced off)
-  engagedAdvanceCount: number;   // advanced with dwell >= threshold (read on)
+  advanceCount: number;
+  quickAdvanceCount: number;
+  engagedAdvanceCount: number;
   // Scroll-up behavior
   scrollBackCount: number;
-  revisitedCardCount: number;    // distinct sections viewed more than once
+  revisitedCardCount: number;
   // Per-angle dwell summary
   dwellByAngle: Record<string, { count: number; avgDwellMs: number; avgScroll: number }>;
+  // API usage
+  apiKeyUsedAnywhere: boolean;   // did any card come from the live model?
+  allCardsFromModel: boolean;    // did every card come from the live model?
+  fallbackCardCount: number;     // how many cards were fallback content
+  // Step-by-step record
+  timeline: TimelineStep[];
+  // Raw action stream (kept for completeness)
   actionSequence: { type: string; cardIndex: number; angle: string; at: number }[];
 }
 
@@ -40,6 +68,71 @@ function median(nums: number[]): number {
   const s = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+// Fold the event stream into one block per card-visit, tagged with its outcome.
+function buildTimeline(records: CardRecord[], events: ActionEvent[]): TimelineStep[] {
+  const steps: TimelineStep[] = [];
+  const visitCounts: Record<number, number> = {};
+  let stepNo = 0;
+
+  events.forEach((e, i) => {
+    // A step opens when a card becomes visible (view or scroll_back).
+    if (e.type !== "view" && e.type !== "scroll_back") return;
+    const rec = records[e.cardIndex];
+    if (!rec) return;
+
+    stepNo += 1;
+    visitCounts[e.cardIndex] = (visitCounts[e.cardIndex] ?? 0) + 1;
+
+    // Find the next event that concerns THIS card index, which closes the step.
+    let outcome: StepOutcome = "still_viewing";
+    let dwellMs = 0;
+    for (let j = i + 1; j < events.length; j++) {
+      const n = events[j];
+      if (n.type === "cta_click" && n.cardIndex === e.cardIndex) {
+        outcome = "signed_up";
+        dwellMs = n.dwellMs ?? 0;
+        break;
+      }
+      if (n.type === "leave" && n.cardIndex === e.cardIndex) {
+        outcome = "closed";
+        dwellMs = n.dwellMs ?? 0;
+        break;
+      }
+      if (n.type === "advance" && n.cardIndex === e.cardIndex) {
+        outcome = "advanced";
+        dwellMs = n.dwellMs ?? 0;
+        break;
+      }
+      // The card became visible again later, or another card took over without
+      // an explicit advance on this one (e.g. scrolled up away from it).
+      if (
+        (n.type === "view" || n.type === "scroll_back") &&
+        n.cardIndex !== e.cardIndex
+      ) {
+        outcome = "scrolled_back_away";
+        // best-effort dwell: time until the next card opened
+        dwellMs = Math.max(0, n.at - e.at);
+        break;
+      }
+    }
+
+    steps.push({
+      step: stepNo,
+      cardIndex: e.cardIndex,
+      visitOrder: visitCounts[e.cardIndex],
+      angle: String(rec.card.angle),
+      headline: rec.card.headline,
+      subheadline: rec.card.subheadline,
+      body: rec.card.body,
+      dwellMs,
+      apiKeyUsed: rec.apiKeyUsed,
+      outcome,
+    });
+  });
+
+  return steps;
 }
 
 export function computeMetrics(
@@ -66,6 +159,8 @@ export function computeMetrics(
     agg.count += 1;
   }
 
+  const fallbackCardCount = records.filter((r) => !r.apiKeyUsed).length;
+
   return {
     cardsViewedBeforeCta: ctaEvent ? ctaEvent.cardIndex + 1 : null,
     ctaConverted: Boolean(ctaEvent),
@@ -90,6 +185,10 @@ export function computeMetrics(
     scrollBackCount: events.filter((e) => e.type === "scroll_back").length,
     revisitedCardCount: records.filter((r) => r.visits > 1).length,
     dwellByAngle,
+    apiKeyUsedAnywhere: records.some((r) => r.apiKeyUsed),
+    allCardsFromModel: records.length > 0 && records.every((r) => r.apiKeyUsed),
+    fallbackCardCount,
+    timeline: buildTimeline(records, events),
     actionSequence: events.map((e) => ({
       type: e.type,
       cardIndex: e.cardIndex,

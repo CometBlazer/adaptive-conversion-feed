@@ -51,17 +51,21 @@ export function useSession() {
     };
   }, []);
 
-  const fetchCard = useCallback(async (ctx: AdaptContext): Promise<Card> => {
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(ctx),
-    });
-    const data = await res.json();
-    return data.card as Card;
-  }, []);
+  // Returns the card AND whether it came from the live model.
+  const fetchCard = useCallback(
+    async (ctx: AdaptContext): Promise<{ card: Card; usedFallback: boolean }> => {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ctx),
+      });
+      const data = await res.json();
+      return { card: data.card as Card, usedFallback: Boolean(data.usedFallback) };
+    },
+    []
+  );
 
-  const appendCard = useCallback((card: Card) => {
+  const appendCard = useCallback((card: Card, usedFallback: boolean) => {
     setRecords((prev) => [
       ...prev,
       {
@@ -71,6 +75,7 @@ export function useSession() {
         scrollDepth: 0,
         visits: 0,
         clickedCta: false,
+        apiKeyUsed: !usedFallback,
       },
     ]);
   }, []);
@@ -84,8 +89,8 @@ export function useSession() {
       snapshot = prev;
       return prev;
     });
-    const card = await fetchCard(buildContext(snapshot));
-    appendCard(card);
+    const { card, usedFallback } = await fetchCard(buildContext(snapshot));
+    appendCard(card, usedFallback);
     generating.current = false;
     setPrefetching(false);
   }, [buildContext, fetchCard, appendCard]);
@@ -95,8 +100,8 @@ export function useSession() {
     sessionStart.current = Date.now();
     generating.current = true;
     setPrefetching(true);
-    const card = await fetchCard(buildContext([]));
-    appendCard(card);
+    const { card, usedFallback } = await fetchCard(buildContext([]));
+    appendCard(card, usedFallback);
     generating.current = false;
     setPrefetching(false);
   }, [buildContext, fetchCard, appendCard]);
@@ -149,7 +154,6 @@ export function useSession() {
       const start = visibleSince.current[index];
       const dwell = start != null ? Date.now() - start : 0;
       commitDwell(index);
-      // Advancing downward is logged neutrally (engaged vs quick is derived from dwell).
       if (direction === "down") {
         logEvent({
           type: "advance",
@@ -179,7 +183,6 @@ export function useSession() {
     [commitDwell, logEvent, records]
   );
 
-  // X button: log a leave against the active section, then show the end screen.
   const close = useCallback(() => {
     const idx = activeIndex.current;
     const start = visibleSince.current[idx];
@@ -203,7 +206,6 @@ export function useSession() {
     setPhase("intro");
   }, []);
 
-  // Tab close still logs a leave (best-effort).
   useEffect(() => {
     const onLeave = () => {
       if (phase !== "feed") return;
@@ -233,6 +235,8 @@ export function useSession() {
   const exportJson = useCallback(() => {
     const payload = {
       product: PRODUCT,
+      apiKeyUsed: metrics.apiKeyUsedAnywhere,
+      allCardsFromModel: metrics.allCardsFromModel,
       sessionStart: new Date(sessionStart.current).toISOString(),
       records,
       events,

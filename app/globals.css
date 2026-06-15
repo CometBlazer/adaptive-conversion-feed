@@ -31,3 +31,8 @@ body {
   background-image: radial-gradient(rgba(20, 17, 15, 0.05) 1px, transparent 1px);
   background-size: 22px 22px;
 }
+
+/* app/globals.css — append this block to the end of the file */
+.feed-smooth {
+  scroll-behavior: smooth;
+}

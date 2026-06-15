@@ -4,35 +4,31 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { ResearchDashboard } from "@/components/ResearchDashboard";
-import type { Card } from "@/types";
+import { MetricsView } from "@/components/MetricsView";
 import type { SessionMetrics } from "@/lib/metrics";
 
 export function EndScreen({
   metrics,
-  latestCard,
   onExport,
   onRestart,
-  showDevOption,
+  showMetricsOption,
 }: {
   metrics: SessionMetrics;
-  latestCard: Card | null;
   onExport: () => void;
   onRestart: () => void;
-  showDevOption: boolean;
+  showMetricsOption: boolean;
 }) {
-  const [showDash, setShowDash] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
 
   return (
-    <div className="flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+    <div className="flex min-h-[100svh] flex-col items-center justify-center px-6 py-16 text-center">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ ease: "easeOut" }}
+        className="flex flex-col items-center"
       >
-        <p className="font-mono text-xs uppercase tracking-[0.24em] text-ember">
-          Session ended
-        </p>
+        <p className="font-mono text-xs uppercase tracking-[0.24em] text-ember">Session ended</p>
         <h1 className="mt-5 font-display text-5xl text-ink sm:text-6xl">Experiment complete.</h1>
         <p className="mt-5 max-w-md text-lg text-slatey">
           Thanks for taking part. Nothing you did was tied to your identity, and the record stays in
@@ -43,21 +39,22 @@ export function EndScreen({
           <Button variant="outline" size="lg" onClick={onRestart}>
             Run another session
           </Button>
-          {showDevOption && (
-            <Button variant="ghost" size="lg" onClick={() => setShowDash((v) => !v)}>
-              {showDash ? "Hide" : "View"} research dashboard
+          {showMetricsOption && (
+            <Button variant="ghost" size="lg" onClick={() => setShowMetrics((v) => !v)}>
+              {showMetrics ? "Hide" : "View"} research dashboard
             </Button>
           )}
         </div>
       </motion.div>
 
-      {showDevOption && showDash && (
-        <ResearchDashboard
-          metrics={metrics}
-          latestCard={latestCard}
-          onExport={onExport}
-          startOpen
-        />
+      {showMetricsOption && showMetrics && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-12 w-full"
+        >
+          <MetricsView metrics={metrics} onExport={onExport} />
+        </motion.div>
       )}
     </div>
   );

@@ -31,23 +31,21 @@ export function PitchCard({
   const sectionRef = useRef<HTMLElement>(null);
   const lastY = useRef(0);
 
-  // Track read-depth of the section via window-relative scroll position.
   useEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
     const handler = () => {
       const rect = el.getBoundingClientRect();
       const vh = window.innerHeight;
-      // Fraction of the section that has scrolled above the fold.
       const scrolled = Math.min(1, Math.max(0, (vh - rect.top) / Math.max(rect.height, 1)));
       onScroll(index, scrolled);
     };
     handler();
-    window.addEventListener("scroll", handler, { passive: true });
-    return () => window.removeEventListener("scroll", handler);
+    const parent = el.parentElement;
+    parent?.addEventListener("scroll", handler, { passive: true });
+    return () => parent?.removeEventListener("scroll", handler);
   }, [index, onScroll]);
 
-  // Observe enter/leave with direction.
   useEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
@@ -75,21 +73,20 @@ export function PitchCard({
     <section
       ref={sectionRef}
       data-card-index={index}
-      className="relative flex min-h-[100svh] snap-start items-center overflow-hidden"
+      className="relative flex h-[100svh] shrink-0 snap-start items-center justify-center overflow-hidden"
       style={{
         background: tint
           ? "linear-gradient(180deg, #FBF9F3 0%, #F3EFE6 100%)"
           : "linear-gradient(180deg, #F6F3EC 0%, #ECE7DA 100%)",
       }}
     >
-      {/* large ambient angle wash, the section's signature */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-32 top-1/2 h-[120vmin] w-[120vmin] -translate-y-1/2 rounded-full opacity-[0.10] blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[120vmin] w-[120vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.08] blur-3xl"
         style={{ background: `radial-gradient(circle, ${hue} 0%, transparent 65%)` }}
       />
 
-      <div className="relative mx-auto w-full max-w-4xl px-8 sm:px-12">
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-8 text-center">
         <span
           className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.22em]"
           style={{ color: hue }}
@@ -106,9 +103,7 @@ export function PitchCard({
           {card.subheadline}
         </p>
 
-        <p className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 sm:text-xl">
-          {card.body}
-        </p>
+        <p className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 sm:text-xl">{card.body}</p>
 
         <div className="mt-12">
           <Button
@@ -121,7 +116,6 @@ export function PitchCard({
         </div>
       </div>
 
-      {/* gentle scroll affordance, only on the first section */}
       {index === 0 && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.2em] text-slatey">
           scroll
