@@ -72,7 +72,10 @@ export function PitchCard({
       style={{ backgroundColor: tint ? "#F6F3EC" : "#EFE9DC" }}
     >
       <div className="absolute top-7 left-1/2 -translate-x-1/2">
-        <div className="mx-auto h-8 w-px bg-slatey/40" />
+        <svg width="16" height="22" viewBox="0 0 16 22" fill="none" className="text-slatey/40">
+          <path d="M3 6l5-5 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M8 1v20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
       </div>
 
       <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-8 text-center">
@@ -84,7 +87,7 @@ export function PitchCard({
           {angleLabel(card.angle)}
         </span>
 
-        <h2 className="mt-8 max-w-3xl font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink sm:text-6xl md:text-7xl">
+        <h2 className="mt-8 max-w-3xl font-display text-3xl font-medium leading-[1.05] tracking-tight text-ink sm:text-4xl md:text-6xl">
           {card.headline}
         </h2>
 
@@ -92,7 +95,7 @@ export function PitchCard({
           {card.subheadline}
         </p>
 
-        <p className="mt-8 max-w-xl text-lg leading-relaxed text-ink/75 sm:text-xl">
+        <p className="mt-8 max-w-xl text-md leading-relaxed text-ink/75 sm:text-lg">
           {card.body}
         </p>
 
@@ -107,13 +110,17 @@ export function PitchCard({
         </div>
       </div>
 
-      <div className="absolute bottom-7 left-1/2 -translate-x-1/2 text-center">
+      {/* bottom scroll indicator — arrow pointing down + one-time hint */}
+      <div className="absolute bottom-7 left-1/2 -translate-x-1/2 flex flex-col items-center">
         {isFirst && (
           <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-slatey">
             scroll
           </div>
         )}
-        <div className="mx-auto h-8 w-px bg-slatey/40" />
+        <svg width="16" height="22" viewBox="0 0 16 22" fill="none" className="text-slatey/40">
+          <path d="M8 1v20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M3 16l5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
     </section>
   );
