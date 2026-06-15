@@ -91,7 +91,7 @@ export function PitchCard({
           {card.headline}
         </h2>
 
-        <p className="mt-7 max-w-2xl font-display text-2xl italic leading-snug text-slatey sm:text-3xl">
+        <p className="mt-7 max-w-2xl font-display text-2xl leading-snug text-slatey sm:text-3xl">
           {card.subheadline}
         </p>
 
