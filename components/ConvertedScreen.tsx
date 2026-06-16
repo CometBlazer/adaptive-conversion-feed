@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { MetricsView } from "@/components/MetricsView";
 import type { SessionMetrics } from "@/lib/metrics";
 import type { SessionProfile } from "@/lib/gemini";
+import { PRODUCT } from "@/lib/product";
 
 export function ConvertedScreen({
   metrics,
@@ -40,7 +41,7 @@ export function ConvertedScreen({
           {angle ? ` — the one that landed used the ${angle.replace(/_/g, " ")} angle.` : "."}
         </p>
         <p className="mt-2 font-mono text-xs text-slatey">
-          (FocusFlow is fictional. Nothing was purchased.)
+          ({PRODUCT.name} is fictional. Nothing was purchased.)
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

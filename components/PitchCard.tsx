@@ -3,7 +3,7 @@
 
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { ANGLE_HUE, ANGLE_LABEL } from "@/lib/product";
+import { ANGLE_HUE, ANGLE_LABEL, PRODUCT } from "@/lib/product";
 import type { Angle, Card } from "@/types";
 
 function angleLabel(angle: string): string {
@@ -105,7 +105,7 @@ export function PitchCard({
             onClick={() => onCta(index)}
             className="h-14 px-9 text-base shadow-[0_18px_40px_-18px_rgba(58,91,224,0.7)]"
           >
-            Buy FocusFlow
+            {PRODUCT.cta}
           </Button>
         </div>
       </div>

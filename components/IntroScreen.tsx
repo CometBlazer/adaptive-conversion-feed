@@ -3,7 +3,7 @@
 
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-
+import { PRODUCT } from "@/lib/product";
 
 export function IntroScreen({ onBegin }: { onBegin: () => void }) {
   return (
@@ -22,26 +22,45 @@ export function IntroScreen({ onBegin }: { onBegin: () => void }) {
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-ember">
           Research prototype
         </p>
+
         <h1 className="mt-4 font-display text-4xl leading-tight text-ink sm:text-5xl">
           This experiment is adaptive.
         </h1>
+
         <p className="mt-5 text-base leading-relaxed text-slatey">
           You&apos;re about to see a feed of sales pitches for a fictional product. After each one,
-          either scroll down, scroll up, click the Call to Action button, or exit the experiment (x button in the top right corner). 
+          either scroll down, scroll up, click the Call to Action button, or exit the experiment
+          using the x button in the top right corner.
         </p>
-        <p className="mt-3 text-base leading-relaxed text-slatey">
-          The fictional product you see is 
+
+        <div className="mt-5 rounded-2xl border border-emerald-900/10 bg-emerald-50/60 p-5 shadow-sm">
+          <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-emerald-700">
+            The fictional product being pitched is:
+          </p>
+
+          <h2 className="mt-2 font-display text-2xl leading-tight text-ink">
+            {PRODUCT.name}
+          </h2>
+
+          <p className="mt-2 text-sm leading-relaxed text-slatey">
+            {PRODUCT.tagline}
+          </p>
+
+          <p className="mt-4 inline-flex rounded-full border border-emerald-700/20 bg-emerald-100/70 px-3 py-1 font-mono text-xs tracking-[0.14em] text-emerald-700">
+            Call to Action: {PRODUCT.cta}
+          </p>
+        </div>
+
+        <p className="mt-5 text-base leading-relaxed text-slatey">
+          The system watches how you engage and tries a different angle each time, looking for what
+          works on you. Nothing you do here is sold, shared, or tied to your identity. It stays in
+          your browser, and you can export or discard it.
         </p>
-        <p className="mt-3 text-base leading-relaxed text-slatey">
-          The system watches how you engage and tries a different angle each time, looking for what works on you. 
-          Nothing you do here is sold, shared, or tied to your identity. It stays in your browser, and
-          you can export or discard it. 
-        </p>
+
         <div className="mt-8 flex items-center gap-4">
           <Button size="lg" onClick={onBegin}>
             I understand, continue.
           </Button>
-          {/* <span className="font-mono text-xs text-slatey">No account. No tracking pixels.</span> */}
         </div>
       </motion.div>
     </motion.div>
