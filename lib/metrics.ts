@@ -19,9 +19,14 @@ export interface TimelineStep {
   subheadline: string;
   body: string;
   dwellMs: number;
-  arrivedBy: "down" | "up" | "start"; // how the user got TO this card
+  arrivedBy: "down" | "up" | "start";
   outcome: StepOutcome;
-  leftBy: "down" | "up" | null;       // direction they left, if they left
+  leftBy: "down" | "up" | null;
+  // model reasoning, surfaced per step
+  inferredUserState: string;
+  reasoningSummary: string;
+  analysis?: string;
+  avoided?: string;
 }
 
 export interface SessionMetrics {
@@ -134,6 +139,10 @@ function buildTimeline(records: CardRecord[], events: ActionEvent[]): TimelineSt
       arrivedBy,
       outcome,
       leftBy,
+      inferredUserState: rec.card.inferred_user_state,
+      reasoningSummary: rec.card.reasoning_summary,
+      analysis: rec.card.analysis,
+      avoided: rec.card.avoided,
     });
   });
 

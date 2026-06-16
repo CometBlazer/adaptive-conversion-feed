@@ -126,6 +126,10 @@ export function MetricsView({
     dwell_ms: Math.round(s.dwellMs),
     outcome: s.outcome,
     left_by: s.leftBy,
+    inferred_user_state: s.inferredUserState,
+    reasoning_summary: s.reasoningSummary,
+    analysis: s.analysis,
+    avoided: s.avoided,
   },
   null,
   2

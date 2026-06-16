@@ -206,6 +206,18 @@ export function ResearchDashboard({
                       <span className="text-slatey">Why this angle: </span>
                       <span className="text-ink">{latestCard.reasoning_summary}</span>
                     </div>
+                    {latestCard.analysis && (
+                      <div>
+                        <span className="text-slatey">Analysis: </span>
+                        <span className="text-ink">{latestCard.analysis}</span>
+                      </div>
+                    )}
+                    {latestCard.avoided && (
+                      <div>
+                        <span className="text-slatey">Avoided: </span>
+                        <span className="text-ink">{latestCard.avoided}</span>
+                      </div>
+                    )}
                   </div>
                 </section>
               )}

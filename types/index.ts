@@ -21,6 +21,8 @@ export interface Card {
   angle: Angle | string;
   inferred_user_state: string;
   reasoning_summary: string;
+  analysis?: string; // model's reasoning from the behavioral record (dev-visible)
+  avoided?: string;  // patterns the model deliberately didn't repeat (dev-visible)
 }
 
 export type ActionType =
