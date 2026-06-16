@@ -21,12 +21,14 @@ export function useSession() {
   const generating = useRef(false);
   const terminal = useRef(false);
 
-  // Synchronous mirror of `records`. Updated immediately whenever records change,
-  // so async work (prefetch context building) always reads the latest committed
-  // cards instead of a stale React snapshot.
+  // Synchronous mirrors of records/events, so async work (prefetch context
+  // building) always reads the latest committed data, not a stale React snapshot.
   const recordsRef = useRef<CardRecord[]>([]);
+  const eventsRef = useRef<ActionEvent[]>([]);
 
-  // Helper: apply an updater to BOTH the ref (synchronously) and state.
+  const since = useCallback(() => Date.now() - sessionStart.current, []);
+
+  // Apply an updater to BOTH the records ref (synchronously) and state.
   const updateRecords = useCallback(
     (updater: (prev: CardRecord[]) => CardRecord[]) => {
       const next = updater(recordsRef.current);
@@ -36,55 +38,65 @@ export function useSession() {
     []
   );
 
-  const since = useCallback(() => Date.now() - sessionStart.current, []);
-
+  // Log an event to BOTH the events ref (synchronously) and state.
   const logEvent = useCallback(
     (e: Omit<ActionEvent, "at">) => {
-      setEvents((prev) => [...prev, { ...e, at: since() }]);
+      const full = { ...e, at: since() };
+      eventsRef.current = [...eventsRef.current, full];
+      setEvents(eventsRef.current);
     },
     [since]
   );
 
-  const buildContext = useCallback((recs: CardRecord[]): AdaptContext => {
-  // Build a quick outcome lookup from the latest timeline.
-  const m = computeMetrics(recs, [], sessionStart.current, Date.now());
-  // Most recent outcome per card index (last visit wins).
-  const outcomeByCard: Record<number, string> = {};
-  for (const step of m.timeline) outcomeByCard[step.cardIndex] = step.outcome;
+  const buildContext = useCallback(
+    (recs: CardRecord[], evs: ActionEvent[]): AdaptContext => {
+      // Real timeline from real events → real outcomes per card.
+      const m = computeMetrics(recs, evs, sessionStart.current, Date.now());
+      const outcomeByCard: Record<number, string> = {};
+      for (const step of m.timeline) outcomeByCard[step.cardIndex] = step.outcome;
 
-  const anglesUsed = recs.map((r) => String(r.card.angle));
-  const dwells = recs.map((r) => r.dwellMs);
+      // Only cards the user has actually SEEN (visits > 0) carry behavioral
+      // signal. The trailing prefetched card has 0 visits — feeding it as
+      // history with a 0ms dwell is what made the model hallucinate.
+      const seen = recs.filter((r) => r.visits > 0);
+      const dwells = seen.map((r) => r.dwellMs);
 
-  return {
-    product: { name: PRODUCT.name, tagline: PRODUCT.tagline, cta: PRODUCT.cta },
-    history: recs.map((r, i) => {
-      const expected = expectedReadMs(r.card.headline, r.card.subheadline, r.card.body);
-      const ratio = expected > 0 ? r.dwellMs / expected : 0;
       return {
-        angle: String(r.card.angle),
-        headline: r.card.headline,
-        body: r.card.body,
-        dwellMs: Math.round(r.dwellMs),
-        expectedReadMs: expected,
-        dwellRatio: Number(ratio.toFixed(2)),
-        dwellRead: dwellInterpretation(ratio),
-        scrollDepth: r.scrollDepth,
-        revisited: r.visits > 1,
-        visits: r.visits,
-        outcome: outcomeByCard[i] ?? "unknown",
-        priorAnalysis: r.card.analysis,
-        priorReasoning: r.card.reasoning_summary,
+        product: { name: PRODUCT.name, tagline: PRODUCT.tagline, cta: PRODUCT.cta },
+        history: recs
+          .map((r, i) => ({ r, i }))
+          .filter(({ r }) => r.visits > 0)
+          .map(({ r, i }) => {
+            const expected = expectedReadMs(r.card.headline, r.card.subheadline, r.card.body);
+            const ratio = expected > 0 ? r.dwellMs / expected : 0;
+            return {
+              angle: String(r.card.angle),
+              headline: r.card.headline,
+              body: r.card.body,
+              dwellMs: Math.round(r.dwellMs),
+              expectedReadMs: expected,
+              dwellRatio: Number(ratio.toFixed(2)),
+              dwellRead: dwellInterpretation(ratio),
+              scrollDepth: r.scrollDepth,
+              revisited: r.visits > 1,
+              visits: r.visits,
+              outcome: outcomeByCard[i] ?? "still_viewing",
+              priorAnalysis: r.card.analysis,
+              priorReasoning: r.card.reasoning_summary,
+            };
+          }),
+        // Angle lock uses ALL records (so it won't regenerate a queued, unseen angle).
+        anglesUsed: recs.map((r) => String(r.card.angle)),
+        stats: {
+          cardsSeen: seen.length,
+          avgDwellMs: dwells.length ? dwells.reduce((a, b) => a + b, 0) / dwells.length : 0,
+          shortestDwellMs: dwells.length ? Math.min(...dwells) : null,
+          longestDwellMs: dwells.length ? Math.max(...dwells) : null,
+        },
       };
-    }),
-    anglesUsed,
-    stats: {
-      cardsSeen: recs.length,
-      avgDwellMs: dwells.length ? dwells.reduce((a, b) => a + b, 0) / dwells.length : 0,
-      shortestDwellMs: dwells.length ? Math.min(...dwells) : null,
-      longestDwellMs: dwells.length ? Math.max(...dwells) : null,
     },
-  };
-}, []);
+    []
+  );
 
   const fetchCard = useCallback(async (ctx: AdaptContext): Promise<Card> => {
     const res = await fetch("/api/generate", {
@@ -117,9 +129,8 @@ export function useSession() {
     if (generating.current || terminal.current) return;
     generating.current = true;
     setPrefetching(true);
-    // Read the latest committed cards synchronously — no stale snapshot.
-    const snapshot = recordsRef.current;
-    const card = await fetchCard(buildContext(snapshot));
+    // Latest committed data, synchronously.
+    const card = await fetchCard(buildContext(recordsRef.current, eventsRef.current));
     appendCard(card);
     generating.current = false;
     setPrefetching(false);
@@ -130,13 +141,14 @@ export function useSession() {
     activeIndex.current = -1;
     activeSince.current = 0;
     recordsRef.current = [];
+    eventsRef.current = [];
     setRecords([]);
     setEvents([]);
     setPhase("feed");
     sessionStart.current = Date.now();
     generating.current = true;
     setPrefetching(true);
-    const card = await fetchCard(buildContext([]));
+    const card = await fetchCard(buildContext([], []));
     appendCard(card);
     generating.current = false;
     setPrefetching(false);
@@ -274,6 +286,7 @@ export function useSession() {
 
   const restart = useCallback(() => {
     recordsRef.current = [];
+    eventsRef.current = [];
     setRecords([]);
     setEvents([]);
     scrollDepth.current = {};
@@ -288,16 +301,15 @@ export function useSession() {
       if (phase !== "feed" || terminal.current) return;
       const idx = activeIndex.current >= 0 ? activeIndex.current : 0;
       const dwell = Date.now() - activeSince.current;
-      setEvents((prev) => [
-        ...prev,
-        {
-          type: "leave",
-          cardIndex: idx,
-          angle: String(recordsRef.current[idx]?.card.angle ?? ""),
-          at: Date.now() - sessionStart.current,
-          dwellMs: dwell,
-        },
-      ]);
+      const full: ActionEvent = {
+        type: "leave",
+        cardIndex: idx,
+        angle: String(recordsRef.current[idx]?.card.angle ?? ""),
+        at: Date.now() - sessionStart.current,
+        dwellMs: dwell,
+      };
+      eventsRef.current = [...eventsRef.current, full];
+      setEvents(eventsRef.current);
     };
     window.addEventListener("beforeunload", onLeave);
     return () => window.removeEventListener("beforeunload", onLeave);
