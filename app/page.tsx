@@ -6,13 +6,12 @@ import { X } from "lucide-react";
 import { useSession } from "@/lib/useSession";
 import { IntroScreen } from "@/components/IntroScreen";
 import { PitchCard } from "@/components/PitchCard";
+import { LoadingCard } from "@/components/LoadingCard";
 import { ConvertedScreen } from "@/components/ConvertedScreen";
 import { EndScreen } from "@/components/EndScreen";
-import { LoadingCard } from "@/components/LoadingCard";
 import { ResearchDashboard } from "@/components/ResearchDashboard";
 
-// const IS_DEV = process.env.NODE_ENV !== "production";
-const IS_DEV = true;
+const IS_DEV = process.env.NODE_ENV !== "production";
 
 export default function Home() {
   const s = useSession();
@@ -47,16 +46,15 @@ export default function Home() {
               onActive={s.setActiveCard}
             />
           ))}
-
-          {s.prefetching && (
-            <LoadingCard index={s.records.length} onActive={s.onLoadingActive} />
-          )}
+          {s.prefetching && <LoadingCard index={s.records.length} onActive={s.onLoadingActive} />}
         </div>
       )}
 
       {s.phase === "converted" && (
         <ConvertedScreen
           metrics={s.metrics}
+          profile={s.profile}
+          profileLoading={s.profileLoading}
           onRestart={s.restart}
           onExport={s.exportJson}
           showMetricsOption={IS_DEV}
@@ -66,6 +64,8 @@ export default function Home() {
       {s.phase === "ended" && (
         <EndScreen
           metrics={s.metrics}
+          profile={s.profile}
+          profileLoading={s.profileLoading}
           onExport={s.exportJson}
           onRestart={s.restart}
           showMetricsOption={IS_DEV}

@@ -45,15 +45,11 @@ OUTPUT: Return ONLY a JSON object, no markdown, with exactly these keys:
 "inferred_user_state": one sentence on what the behavior suggests about this visitor.
 "reasoning_summary": one sentence on why this angle + this creative execution, given the record.`;
 
-// ── Digest ───────────────────────────────────────────────────────────────────
-// Excludes the CURRENT (last) card when it is still being viewed, so the model
-// never reads a prefetch-timing 0ms dwell as a rejection.
 function buildSessionDigest(ctx: AdaptContext): string {
   if (!ctx.history.length) {
     return "(FIRST card of the session. No behavioral data yet — open with something striking that earns the next scroll.)";
   }
 
-  // Drop the trailing item if it's the in-progress card (outcome still_viewing).
   let hist = ctx.history;
   const last = hist[hist.length - 1];
   if (last && last.outcome === "still_viewing") {
@@ -210,20 +206,17 @@ export async function generateCard(
 }
 
 // ── Post-action reflection ───────────────────────────────────────────────────
-// A cheap, separate call fired AFTER a card's outcome resolves. Writes a short
-// retrospective on what just happened, used as input to future cards and as a
-// takeaway on the converting/closing card.
 export interface ReflectionInput {
   angle: string;
   headline: string;
   subheadline: string;
   body: string;
-  priorIntent: string;       // the pre_load reasoning_summary
+  priorIntent: string;
   dwellMs: number;
   expectedReadMs: number;
   dwellRatio: number;
   scrollDepth: number;
-  outcome: string;           // advanced | scrolled_back_away | signed_up | closed
+  outcome: string;
   visits: number;
 }
 
@@ -238,7 +231,6 @@ export async function reflectOnAction(input: ReflectionInput): Promise<string> {
     : "scrolled down to the next card";
 
   if (!key) {
-    // Deterministic fallback reflection for no-key testing.
     if (input.outcome === "signed_up") return `Converted on the ${input.angle} angle — this framing closed them.`;
     if (input.outcome === "closed") return `Lost them on the ${input.angle} angle; this framing didn't hold.`;
     const fast = input.dwellRatio < 0.6 ? "read fast" : input.dwellRatio > 1.6 ? "lingered" : "read about once";
@@ -264,5 +256,109 @@ Write the JSON reflection.`;
     return typeof parsed.reflection === "string" ? parsed.reflection : "";
   } catch {
     return "";
+  }
+}
+
+// ── End-of-session profile ───────────────────────────────────────────────────
+export interface ProfileInput {
+  converted: boolean;
+  ctaAngle: string | null;
+  cards: {
+    angle: string;
+    headline: string;
+    dwellMs: number;
+    expectedReadMs: number;
+    dwellRatio: number;
+    outcome: string;
+    visits: number;
+    reflection?: string;
+  }[];
+}
+
+export interface SessionProfile {
+  summary: string;
+  traits: string[];
+  what_worked: string;
+  what_didnt: string;
+  converting_factor: string;
+}
+
+const PROFILE_SYSTEM = `You are the analyst closing out an adaptive-persuasion session. Build a SHORT, grounded profile of this one visitor based ONLY on how they behaved across the cards.
+
+STRICT RULES:
+- Every claim must point to specific evidence from the session (a dwell ratio, a revisit, an outcome, which angle converted). If you can't tie it to an observed behavior, don't say it.
+- ONE layer of inference only. "They lingered on evidence and converted there → convinced by concrete mechanics" is fine. Do NOT chain further ("...therefore they're an engineer who distrusts marketing and probably..."). No spiraling.
+- Stay about THIS USER in relation to THIS PRODUCT and these messages. NO demographic guessing (age, job title, location, income), no personality typing beyond what the behavior shows, no unrelated speculation.
+- Be honest and concrete. If the signal is thin, say the read is tentative.
+
+Return ONLY a JSON object:
+{"summary": string, "traits": string[], "what_worked": string, "what_didnt": string, "converting_factor": string}
+
+"summary": 2-3 sentences characterizing how this visitor engaged and what persuaded (or lost) them.
+"traits": 2-4 short statements, each grounded in a specific behavior, with the evidence in parentheses.
+"what_worked": the angle(s)/framing that pulled them forward, with the evidence.
+"what_didnt": the angle(s)/framing they bounced off, with the evidence.
+"converting_factor": if they converted, the specific card/angle and why it likely closed them; if not, what lost them. One sentence.`;
+
+export async function buildSessionProfile(input: ProfileInput): Promise<SessionProfile | null> {
+  const key = process.env.GEMINI_API_KEY;
+
+  if (!key) {
+    const sorted = [...input.cards].sort((a, b) => b.dwellRatio - a.dwellRatio);
+    const best = sorted[0];
+    const worst = sorted[sorted.length - 1];
+    return {
+      summary: input.converted
+        ? `Visitor moved through ${input.cards.length} cards and converted on the ${input.ctaAngle} angle, engaging fastest with concrete framing.`
+        : `Visitor viewed ${input.cards.length} cards without converting, advancing quickly through each.`,
+      traits: [
+        best ? `Engaged most with the ${best.angle} angle (highest dwell ratio ${best.dwellRatio.toFixed(2)}).` : "",
+        worst && worst !== best ? `Bounced off the ${worst.angle} angle (lowest dwell ratio ${worst.dwellRatio.toFixed(2)}).` : "",
+      ].filter(Boolean),
+      what_worked: best ? `The ${best.angle} framing held attention longest.` : "Unclear.",
+      what_didnt: worst ? `The ${worst.angle} framing was skimmed fastest.` : "Unclear.",
+      converting_factor: input.converted
+        ? `Converted on ${input.ctaAngle} — concrete framing closed them.`
+        : "Did not convert.",
+    };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-flash-lite-latest",
+      generationConfig: { responseMimeType: "application/json", temperature: 0.5 },
+      systemInstruction: PROFILE_SYSTEM,
+    });
+
+    const cardLines = input.cards
+      .map(
+        (c, i) =>
+          `Card ${i + 1} [${c.angle}] "${c.headline}": dwell ${c.dwellMs}ms vs ~${c.expectedReadMs}ms (ratio ${c.dwellRatio.toFixed(
+            2
+          )}), visits ${c.visits}, outcome ${c.outcome}${c.reflection ? ` — reflection: ${c.reflection}` : ""}`
+      )
+      .join("\n");
+
+    const prompt = `Session outcome: ${input.converted ? `CONVERTED on the "${input.ctaAngle}" angle` : "did NOT convert"}.
+
+Cards shown, in order:
+${cardLines}
+
+Build the grounded JSON profile. Tie every claim to the evidence above.`;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    const parsed = JSON.parse(text);
+    if (typeof parsed.summary !== "string" || !Array.isArray(parsed.traits)) return null;
+    return {
+      summary: parsed.summary,
+      traits: parsed.traits.map(String),
+      what_worked: String(parsed.what_worked ?? ""),
+      what_didnt: String(parsed.what_didnt ?? ""),
+      converting_factor: String(parsed.converting_factor ?? ""),
+    };
+  } catch {
+    return null;
   }
 }

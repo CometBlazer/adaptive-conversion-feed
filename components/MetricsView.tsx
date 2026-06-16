@@ -6,6 +6,7 @@ import { ChevronDown, Download } from "lucide-react";
 import { FullJsonBlock } from "@/components/FullJsonBlock";
 import { PRODUCT } from "@/lib/product";
 import type { SessionMetrics, StepOutcome } from "@/lib/metrics";
+import type { SessionProfile } from "@/lib/gemini";
 
 function ms(n: number | null): string {
   if (n === null) return "—";
@@ -39,9 +40,11 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 
 export function MetricsView({
   metrics,
+  profile,
   onExport,
 }: {
   metrics: SessionMetrics;
+  profile?: SessionProfile | null;
   onExport: () => void;
 }) {
   const [openStep, setOpenStep] = useState<number | null>(null);
@@ -49,6 +52,7 @@ export function MetricsView({
   const fullPayload = {
     product: PRODUCT,
     metrics,
+    reflection_summary: profile ?? null,
   };
 
   return (
@@ -69,6 +73,31 @@ export function MetricsView({
         <Stat label="Revisited" value={metrics.revisitedCardCount} />
         <Stat label="CTA angle" value={metrics.ctaAngle ?? "—"} />
       </div>
+
+      {profile && (
+        <div className="mt-7">
+          <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-ember">
+            Session profile
+          </h3>
+          <div className="space-y-3 rounded-xl border border-mist bg-white/70 px-4 py-3 text-sm leading-relaxed text-ink">
+            <p>{profile.summary}</p>
+            {profile.traits.length > 0 && (
+              <ul className="list-disc space-y-1 pl-5 text-slatey">
+                {profile.traits.map((t, i) => (
+                  <li key={i}>{t}</li>
+                ))}
+              </ul>
+            )}
+            <div className="grid gap-2 font-mono text-[11px] text-slatey sm:grid-cols-2">
+              <div><span className="text-ink">What worked: </span>{profile.what_worked}</div>
+              <div><span className="text-ink">What didn&apos;t: </span>{profile.what_didnt}</div>
+              <div className="sm:col-span-2">
+                <span className="text-ink">Converting factor: </span>{profile.converting_factor}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <h3 className="mb-2 mt-7 font-mono text-[11px] uppercase tracking-[0.16em] text-ember">
         Step-by-step ({metrics.timeline.length})

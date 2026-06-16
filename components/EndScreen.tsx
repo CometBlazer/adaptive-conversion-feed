@@ -2,18 +2,23 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { MetricsView } from "@/components/MetricsView";
 import type { SessionMetrics } from "@/lib/metrics";
+import type { SessionProfile } from "@/lib/gemini";
 
 export function EndScreen({
   metrics,
+  profile,
+  profileLoading,
   onExport,
   onRestart,
   showMetricsOption,
 }: {
   metrics: SessionMetrics;
+  profile: SessionProfile | null;
+  profileLoading: boolean;
   onExport: () => void;
   onRestart: () => void;
   showMetricsOption: boolean;
@@ -22,12 +27,7 @@ export function EndScreen({
 
   return (
     <div className="flex min-h-[100svh] flex-col items-center justify-center px-6 py-16 text-center">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ ease: "easeOut" }}
-        className="flex flex-col items-center"
-      >
+      <div className="flex flex-col items-center">
         <p className="font-mono text-xs uppercase tracking-[0.24em] text-ember">Session ended</p>
         <h1 className="mt-5 font-display text-5xl text-ink sm:text-6xl">Experiment complete.</h1>
         <p className="mt-5 max-w-md text-lg text-slatey">
@@ -40,21 +40,31 @@ export function EndScreen({
             Run another session
           </Button>
           {showMetricsOption && (
-            <Button variant="ghost" size="lg" onClick={() => setShowMetrics((v) => !v)}>
-              {showMetrics ? "Hide" : "View"} research dashboard
+            <Button
+              variant="ghost"
+              size="lg"
+              onClick={() => setShowMetrics((v) => !v)}
+              disabled={profileLoading}
+            >
+              {profileLoading ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Compiling…
+                </>
+              ) : showMetrics ? (
+                "Hide research dashboard"
+              ) : (
+                "View research dashboard"
+              )}
             </Button>
           )}
         </div>
-      </motion.div>
+      </div>
 
-      {showMetricsOption && showMetrics && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-12 w-full"
-        >
-          <MetricsView metrics={metrics} onExport={onExport} />
-        </motion.div>
+      {showMetricsOption && showMetrics && !profileLoading && (
+        <div className="mt-12 w-full">
+          <MetricsView metrics={metrics} profile={profile} onExport={onExport} />
+        </div>
       )}
     </div>
   );

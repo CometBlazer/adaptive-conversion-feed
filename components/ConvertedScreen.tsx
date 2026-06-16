@@ -2,19 +2,24 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { MetricsView } from "@/components/MetricsView";
 import type { SessionMetrics } from "@/lib/metrics";
+import type { SessionProfile } from "@/lib/gemini";
 
 export function ConvertedScreen({
   metrics,
+  profile,
+  profileLoading,
   onRestart,
   onExport,
   showMetricsOption,
 }: {
   metrics: SessionMetrics;
+  profile: SessionProfile | null;
+  profileLoading: boolean;
   onRestart: () => void;
   onExport: () => void;
   showMetricsOption: boolean;
@@ -25,11 +30,7 @@ export function ConvertedScreen({
 
   return (
     <div className="flex min-h-[100svh] flex-col items-center justify-center px-6 py-16 text-center">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="flex flex-col items-center"
-      >
+      <div className="flex flex-col items-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-moss/15">
           <Check className="h-6 w-6 text-moss" />
         </div>
@@ -47,21 +48,31 @@ export function ConvertedScreen({
             Run another session
           </Button>
           {showMetricsOption && (
-            <Button variant="ghost" size="lg" onClick={() => setShowMetrics((v) => !v)}>
-              {showMetrics ? "Hide" : "View"} metrics
+            <Button
+              variant="ghost"
+              size="lg"
+              onClick={() => setShowMetrics((v) => !v)}
+              disabled={profileLoading}
+            >
+              {profileLoading ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Compiling…
+                </>
+              ) : showMetrics ? (
+                "Hide metrics"
+              ) : (
+                "View metrics"
+              )}
             </Button>
           )}
         </div>
-      </motion.div>
+      </div>
 
-      {showMetricsOption && showMetrics && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-12 w-full"
-        >
-          <MetricsView metrics={metrics} onExport={onExport} />
-        </motion.div>
+      {showMetricsOption && showMetrics && !profileLoading && (
+        <div className="mt-12 w-full">
+          <MetricsView metrics={metrics} profile={profile} onExport={onExport} />
+        </div>
       )}
     </div>
   );

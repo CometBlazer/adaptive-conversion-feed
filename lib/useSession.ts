@@ -4,7 +4,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRODUCT } from "@/lib/product";
 import { computeMetrics, expectedReadMs, dwellInterpretation } from "@/lib/metrics";
-import { reflectOnAction, type ReflectionInput } from "@/lib/gemini";
+import {
+  reflectOnAction,
+  buildSessionProfile,
+  type ReflectionInput,
+  type SessionProfile,
+} from "@/lib/gemini";
 import type { ActionEvent, AdaptContext, Card, CardRecord } from "@/types";
 
 type Phase = "intro" | "feed" | "converted" | "ended";
@@ -14,6 +19,8 @@ export function useSession() {
   const [records, setRecords] = useState<CardRecord[]>([]);
   const [events, setEvents] = useState<ActionEvent[]>([]);
   const [prefetching, setPrefetching] = useState(false);
+  const [profile, setProfile] = useState<SessionProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const sessionStart = useRef<number>(Date.now());
   const scrollDepth = useRef<Record<number, number>>({});
@@ -22,14 +29,11 @@ export function useSession() {
   const generating = useRef(false);
   const terminal = useRef(false);
 
-  // Synchronous mirrors of records/events, so async work (prefetch context
-  // building) always reads the latest committed data, not a stale React snapshot.
   const recordsRef = useRef<CardRecord[]>([]);
   const eventsRef = useRef<ActionEvent[]>([]);
 
   const since = useCallback(() => Date.now() - sessionStart.current, []);
 
-  // Apply an updater to BOTH the records ref (synchronously) and state.
   const updateRecords = useCallback(
     (updater: (prev: CardRecord[]) => CardRecord[]) => {
       const next = updater(recordsRef.current);
@@ -39,7 +43,6 @@ export function useSession() {
     []
   );
 
-  // Log an event to BOTH the events ref (synchronously) and state.
   const logEvent = useCallback(
     (e: Omit<ActionEvent, "at">) => {
       const full = { ...e, at: since() };
@@ -51,14 +54,10 @@ export function useSession() {
 
   const buildContext = useCallback(
     (recs: CardRecord[], evs: ActionEvent[]): AdaptContext => {
-      // Real timeline from real events → real outcomes per card.
       const m = computeMetrics(recs, evs, sessionStart.current, Date.now());
       const outcomeByCard: Record<number, string> = {};
       for (const step of m.timeline) outcomeByCard[step.cardIndex] = step.outcome;
 
-      // Only cards the user has actually SEEN (visits > 0) carry behavioral
-      // signal. The trailing prefetched card has 0 visits — feeding it as
-      // history with a 0ms dwell is what made the model hallucinate.
       const seen = recs.filter((r) => r.visits > 0);
       const dwells = seen.map((r) => r.dwellMs);
 
@@ -87,7 +86,6 @@ export function useSession() {
               postReflection: r.card.post_action_reflection,
             };
           }),
-        // Angle lock uses ALL records (so it won't regenerate a queued, unseen angle).
         anglesUsed: recs.map((r) => String(r.card.angle)),
         stats: {
           cardsSeen: seen.length,
@@ -131,7 +129,6 @@ export function useSession() {
     if (generating.current || terminal.current) return;
     generating.current = true;
     setPrefetching(true);
-    // Latest committed data, synchronously.
     const card = await fetchCard(buildContext(recordsRef.current, eventsRef.current));
     appendCard(card);
     generating.current = false;
@@ -146,6 +143,8 @@ export function useSession() {
     eventsRef.current = [];
     setRecords([]);
     setEvents([]);
+    setProfile(null);
+    setProfileLoading(false);
     setPhase("feed");
     sessionStart.current = Date.now();
     generating.current = true;
@@ -174,7 +173,6 @@ export function useSession() {
     [updateRecords]
   );
 
-  // Fires a post-action reflection for a resolved card and stores it on the record.
   const reflectOn = useCallback(
     async (index: number, outcome: string) => {
       const rec = recordsRef.current[index];
@@ -207,6 +205,38 @@ export function useSession() {
       });
     },
     [updateRecords]
+  );
+
+  // End-of-session profile. Gated: sets profileLoading true, resolves, sets false.
+  const buildProfile = useCallback(
+    async (ctaAngle: string | null, converted: boolean) => {
+      setProfileLoading(true);
+      // Let in-flight per-card reflections land first.
+      await new Promise((r) => setTimeout(r, 300));
+      const recs = recordsRef.current;
+      const evs = eventsRef.current;
+      const m = computeMetrics(recs, evs, sessionStart.current, Date.now());
+      const firstVisitSteps = m.timeline.filter((s) => s.visitOrder === 1);
+      const cards = firstVisitSteps.map((s) => {
+        const rec = recs[s.cardIndex];
+        const expected = expectedReadMs(rec.card.headline, rec.card.subheadline, rec.card.body);
+        const ratio = expected > 0 ? rec.dwellMs / expected : 0;
+        return {
+          angle: s.angle,
+          headline: s.headline,
+          dwellMs: Math.round(rec.dwellMs),
+          expectedReadMs: expected,
+          dwellRatio: ratio,
+          outcome: s.outcome,
+          visits: rec.visits,
+          reflection: rec.card.post_action_reflection,
+        };
+      });
+      const result = await buildSessionProfile({ converted, ctaAngle, cards });
+      setProfile(result);
+      setProfileLoading(false);
+    },
+    []
   );
 
   const setActiveCard = useCallback(
@@ -265,10 +295,9 @@ export function useSession() {
       activeIndex.current = index;
       activeSince.current = now;
 
-      // Prefetch when the last card becomes active.
       if (index === recordsRef.current.length - 1) void prefetchNext();
     },
-    [addDwell, logEvent, updateRecords, prefetchNext]
+    [addDwell, logEvent, updateRecords, prefetchNext, reflectOn]
   );
 
   const onLoadingActive = useCallback(() => {
@@ -284,10 +313,11 @@ export function useSession() {
         dwellMs: dwell,
         direction: "down",
       });
+      void reflectOn(prev, "advanced");
     }
     activeIndex.current = -1;
     activeSince.current = Date.now();
-  }, [addDwell, logEvent]);
+  }, [addDwell, logEvent, reflectOn]);
 
   const onScroll = useCallback((index: number, depth: number) => {
     scrollDepth.current[index] = Math.max(scrollDepth.current[index] ?? 0, depth);
@@ -299,15 +329,12 @@ export function useSession() {
     const idx = activeIndex.current >= 0 ? activeIndex.current : 0;
     const dwell = Date.now() - activeSince.current;
     addDwell(idx, dwell);
-    logEvent({
-      type: "cta_click",
-      cardIndex: idx,
-      angle: String(recordsRef.current[idx]?.card.angle ?? ""),
-      dwellMs: dwell,
-    });
+    const angle = String(recordsRef.current[idx]?.card.angle ?? "");
+    logEvent({ type: "cta_click", cardIndex: idx, angle, dwellMs: dwell });
     void reflectOn(idx, "signed_up");
+    void buildProfile(angle, true);
     setPhase("converted");
-  }, [addDwell, logEvent]);
+  }, [addDwell, logEvent, reflectOn, buildProfile]);
 
   const close = useCallback(() => {
     if (terminal.current) return;
@@ -322,14 +349,17 @@ export function useSession() {
       dwellMs: dwell,
     });
     void reflectOn(idx, "closed");
+    void buildProfile(null, false);
     setPhase("ended");
-  }, [addDwell, logEvent]);
+  }, [addDwell, logEvent, reflectOn, buildProfile]);
 
   const restart = useCallback(() => {
     recordsRef.current = [];
     eventsRef.current = [];
     setRecords([]);
     setEvents([]);
+    setProfile(null);
+    setProfileLoading(false);
     scrollDepth.current = {};
     activeIndex.current = -1;
     activeSince.current = 0;
@@ -368,6 +398,7 @@ export function useSession() {
       records,
       events,
       metrics,
+      reflection_summary: profile,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -376,13 +407,15 @@ export function useSession() {
     a.download = `acf-session-${sessionStart.current}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [records, events, metrics]);
+  }, [records, events, metrics, profile]);
 
   return {
     phase,
     records,
     prefetching,
     metrics,
+    profile,
+    profileLoading,
     begin,
     setActiveCard,
     onLoadingActive,
