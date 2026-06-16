@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRODUCT } from "@/lib/product";
 import { computeMetrics, expectedReadMs, dwellInterpretation } from "@/lib/metrics";
+import { reflectOnAction, type ReflectionInput } from "@/lib/gemini";
 import type { ActionEvent, AdaptContext, Card, CardRecord } from "@/types";
 
 type Phase = "intro" | "feed" | "converted" | "ended";
@@ -83,6 +84,7 @@ export function useSession() {
               outcome: outcomeByCard[i] ?? "still_viewing",
               priorAnalysis: r.card.analysis,
               priorReasoning: r.card.reasoning_summary,
+              postReflection: r.card.post_action_reflection,
             };
           }),
         // Angle lock uses ALL records (so it won't regenerate a queued, unseen angle).
@@ -172,6 +174,41 @@ export function useSession() {
     [updateRecords]
   );
 
+  // Fires a post-action reflection for a resolved card and stores it on the record.
+  const reflectOn = useCallback(
+    async (index: number, outcome: string) => {
+      const rec = recordsRef.current[index];
+      if (!rec) return;
+      const expected = expectedReadMs(rec.card.headline, rec.card.subheadline, rec.card.body);
+      const ratio = expected > 0 ? rec.dwellMs / expected : 0;
+      const input: ReflectionInput = {
+        angle: String(rec.card.angle),
+        headline: rec.card.headline,
+        subheadline: rec.card.subheadline,
+        body: rec.card.body,
+        priorIntent: rec.card.reasoning_summary,
+        dwellMs: Math.round(rec.dwellMs),
+        expectedReadMs: expected,
+        dwellRatio: ratio,
+        scrollDepth: rec.scrollDepth,
+        outcome,
+        visits: rec.visits,
+      };
+      const reflection = await reflectOnAction(input);
+      if (!reflection) return;
+      updateRecords((prev) => {
+        if (!prev[index]) return prev;
+        const next = [...prev];
+        next[index] = {
+          ...next[index],
+          card: { ...next[index].card, post_action_reflection: reflection },
+        };
+        return next;
+      });
+    },
+    [updateRecords]
+  );
+
   const setActiveCard = useCallback(
     (index: number) => {
       if (terminal.current) return;
@@ -193,6 +230,8 @@ export function useSession() {
             direction: "down",
           });
         }
+        const outcome = exitDir === "down" ? "advanced" : "scrolled_back_away";
+        void reflectOn(prev, outcome);
       }
 
       const arriveDir: "up" | "down" | "start" =
@@ -266,6 +305,7 @@ export function useSession() {
       angle: String(recordsRef.current[idx]?.card.angle ?? ""),
       dwellMs: dwell,
     });
+    void reflectOn(idx, "signed_up");
     setPhase("converted");
   }, [addDwell, logEvent]);
 
@@ -281,6 +321,7 @@ export function useSession() {
       angle: String(recordsRef.current[idx]?.card.angle ?? ""),
       dwellMs: dwell,
     });
+    void reflectOn(idx, "closed");
     setPhase("ended");
   }, [addDwell, logEvent]);
 

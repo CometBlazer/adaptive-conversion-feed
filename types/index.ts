@@ -19,10 +19,13 @@ export interface Card {
   subheadline: string;
   body: string;
   angle: Angle | string;
+  // pre_load reasoning (written before the card is shown):
   inferred_user_state: string;
   reasoning_summary: string;
-  analysis?: string; // model's reasoning from the behavioral record (dev-visible)
-  avoided?: string;  // patterns the model deliberately didn't repeat (dev-visible)
+  analysis?: string;
+  avoided?: string;
+  // post_action reflection (written after the user reacts to this card):
+  post_action_reflection?: string;
 }
 
 export type ActionType =
@@ -67,6 +70,7 @@ export interface AdaptContext {
     // the model's own prior intent, fed back for reflection:
     priorAnalysis?: string;
     priorReasoning?: string;
+    postReflection?: string;
   }[];
   anglesUsed: string[];
   stats: {

@@ -49,11 +49,13 @@ export interface TimelineStep {
   arrivedBy: "down" | "up" | "start";
   outcome: StepOutcome;
   leftBy: "down" | "up" | null;
-  // model reasoning, surfaced per step
-  inferredUserState: string;
-  reasoningSummary: string;
-  analysis?: string;
-  avoided?: string;
+  // pre_load reasoning (decided BEFORE the card was shown)
+  pre_load_inferred_user_state: string;
+  pre_load_reasoning_summary: string;
+  pre_load_analysis?: string;
+  pre_load_avoided?: string;
+  // post_action reflection (written AFTER the user reacted)
+  post_action_reflection?: string;
 }
 
 export interface SessionMetrics {
@@ -166,10 +168,11 @@ function buildTimeline(records: CardRecord[], events: ActionEvent[]): TimelineSt
       arrivedBy,
       outcome,
       leftBy,
-      inferredUserState: rec.card.inferred_user_state,
-      reasoningSummary: rec.card.reasoning_summary,
-      analysis: rec.card.analysis,
-      avoided: rec.card.avoided,
+      pre_load_inferred_user_state: rec.card.inferred_user_state,
+      pre_load_reasoning_summary: rec.card.reasoning_summary,
+      pre_load_analysis: rec.card.analysis,
+      pre_load_avoided: rec.card.avoided,
+      post_action_reflection: rec.card.post_action_reflection,
     });
   });
 
