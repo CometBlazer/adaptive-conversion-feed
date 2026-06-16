@@ -26,6 +26,7 @@ export interface Card {
   avoided?: string;
   // post_action reflection (written after the user reacts to this card):
   post_action_reflection?: string;
+   register?: string; // voice register chosen for this card (plain | direct | informational | creative | conversational)
 }
 
 export type ActionType =

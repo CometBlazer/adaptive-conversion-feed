@@ -5,7 +5,7 @@ import { ANGLES } from "@/types";
 
 const SYSTEM = `You generate ONE persuasive landing-page section for a fictional product, as part of an adaptive-persuasion experiment. The visitor scrolls a feed; each section tries a fresh tactic. The visitor has been told the page adapts to their behavior.
 
-Your job each turn: study the FULL behavioral record of the session so far, reason hard about what this specific person is responding to, and produce a section that is genuinely NEW — a different angle, a different shape, and a genuinely creative execution, not a textbook version of the angle.
+Your job each turn: study the FULL behavioral record of the session so far, reason about what this specific person is responding to, and produce a section that is genuinely NEW — a different angle, a different voice, and a fresh execution.
 
 HOW TO READ THE BEHAVIORAL RECORD:
 - dwell = how long they stayed on a card. Long dwell = it held them. Short dwell = it bounced off.
@@ -23,31 +23,38 @@ REFLECT BEFORE YOU WRITE — each prior card is shown with your prior intent and
 A REVISIT is your strongest positive signal: that card's content worked. Lean into what made it work.
 Diagnose the prior cards, then choose the next move as a reaction. Do NOT treat each card as a fresh start.
 
-BE CONCISE — THIS IS THE MOST IMPORTANT FORMATTING RULE:
-- This is a scroll feed, not an essay. People skim. Every section must be readable in under 3 seconds.
-- headline: max 8 words. Punchy.
-- subheadline: max 12 words. One line.
-- body: max 2 short sentences, ~30 words TOTAL. Hard ceiling. Often 1 sentence is better.
-- Cut every word that isn't pulling weight. No throat-clearing, no stacked clauses. Short, declarative, high-impact.
+VARY THE VOICE — THIS IS IMPORTANT. Do not sound like "AI marketing copy" every time. Each card must pick ONE register and commit to it fully:
+- "plain": straightforward, factual, human. Like a clear-headed founder explaining the tool to a friend. No metaphors, no hype, no rhetorical flourishes. Just what it does and why it matters. ("FocusFlow reads your notes and writes the project plan for you. That's the whole thing.")
+- "direct": blunt and confident. Short declaratives. States the value flatly without dressing it up. ("Stop reformatting notes. Paste them. Get a plan.")
+- "informational": specific and concrete, leads with a fact or mechanic. Reads like documentation that happens to persuade. ("Drop in a voice memo. FocusFlow returns a timeline with milestones and owners.")
+- "creative": vivid, metaphor, unexpected framing, a turn of phrase. This is the only register where you get clever — and use it sparingly.
+- "conversational": warm, casual, second-person, like a real person talking. Contractions, plain words. ("You know that pile of half-finished notes? Yeah. This fixes that.")
+
+Rotate registers across cards. If a previous clever/creative card got skimmed, SWITCH to plain or informational — some people distrust polished copy and want the straight facts. If plain cards got skimmed, try a creative hook. Match the register to what the behavior suggests they trust. Most cards should lean plain/direct/informational; creative is the exception, not the default.
+
+BE CONCISE:
+- This is a scroll feed. People skim. Readable in under 3 seconds.
+- headline: max 8 words. subheadline: max 12 words. body: max 2 short sentences, ~30 words total.
+- Cut every word that isn't pulling weight.
 
 HARD RULES:
 - Use exactly one of the ALLOWED ANGLES given in the user message. Never reuse a used angle.
-- Be CREATIVE within the angle. Avoid clichés and the obvious execution. Do not sound like generic SaaS copy.
-- VARY THE FORM hard from the previous cards, but keep ALL of them short: rotate between a punchy one-liner, a single provocative question, a two-sentence problem→twist, a blunt factual claim, a concrete one-line scenario. Never echo the previous card's structure or rhythm.
-- Never reuse a distinctive word or image a previous card already used. Find fresh language.
+- Pick a register that differs from the previous card's register.
+- Never reuse a distinctive word or image a previous card already used.
 - Truthful about a fictional product. No fabricated stats, named customers, or fake scarcity. No exploiting fear or insecurity.
 
 OUTPUT: Return ONLY a JSON object, no markdown, with exactly these keys:
-{"analysis": string, "avoided": string, "angle": string, "headline": string, "subheadline": string, "body": string, "inferred_user_state": string, "reasoning_summary": string}
+{"analysis": string, "avoided": string, "angle": string, "register": string, "headline": string, "subheadline": string, "body": string, "inferred_user_state": string, "reasoning_summary": string}
 
 "analysis": 2-4 sentences reasoning from the behavioral record before you write.
-"avoided": one sentence naming the specific patterns/words/structures from prior cards you are deliberately NOT repeating.
+"avoided": one sentence naming the patterns/words/structures/registers from prior cards you are NOT repeating.
+"register": which voice you chose (plain | direct | informational | creative | conversational).
 "inferred_user_state": one sentence on what the behavior suggests about this visitor.
-"reasoning_summary": one sentence on why this angle + this creative execution, given the record.`;
+"reasoning_summary": one sentence on why this angle + register + execution, given the record.`;
 
 function buildSessionDigest(ctx: AdaptContext): string {
   if (!ctx.history.length) {
-    return "(FIRST card of the session. No behavioral data yet — open with something striking that earns the next scroll.)";
+    return "(FIRST card of the session. No behavioral data yet — open clear and direct; save cleverness for later if plain doesn't land.)";
   }
 
   let hist = ctx.history;
@@ -96,7 +103,7 @@ Session-wide signal: ${JSON.stringify(ctx.stats)}
 BEHAVIORAL RECORD (oldest first — reason from this; the current on-screen card is intentionally excluded):
 ${buildSessionDigest(ctx)}
 
-Craft a section with a NEW allowed angle and a creative, unexpected execution that breaks from the patterns above. Keep it SHORT: headline ≤8 words, subheadline ≤12 words, body ≤2 sentences / ~30 words. Return the JSON object only.`;
+Craft a section with a NEW allowed angle and a register that differs from the last card. Keep it SHORT: headline ≤8 words, subheadline ≤12 words, body ≤2 sentences / ~30 words. Lean plain/direct/informational unless the behavior says they want something more creative. Return the JSON object only.`;
 }
 
 function isValidCard(obj: unknown): boolean {
@@ -126,20 +133,21 @@ function toCard(parsed: Record<string, unknown>): Card {
     reasoning_summary: String(parsed.reasoning_summary ?? ""),
     analysis: typeof parsed.analysis === "string" ? parsed.analysis : undefined,
     avoided: typeof parsed.avoided === "string" ? parsed.avoided : undefined,
+    register: typeof parsed.register === "string" ? parsed.register : undefined,
   };
 }
 
-const FALLBACKS: Record<string, Pick<Card, "angle" | "headline" | "subheadline" | "body">> = {
-  social_proof: { angle: "social_proof", headline: "Founders ship faster with FocusFlow", subheadline: "The teams who stopped wrestling their notes.", body: "Early-stage builders turn raw thinking into a plan the whole team can run with." },
-  curiosity: { angle: "curiosity", headline: "What if your notes wrote the plan?", subheadline: "A faster path from idea to launch.", body: "Most tools make you do the structuring. FocusFlow flips that." },
-  cost_savings: { angle: "cost_savings", headline: "Reclaim ten hours a week", subheadline: "Planning shouldn't cost your build time.", body: "Every hour reformatting notes is an hour not building. Take it back." },
-  evidence: { angle: "evidence", headline: "Brain-dump to milestones, faster", subheadline: "Built for how founders actually think.", body: "FocusFlow turns unstructured notes into structured timelines in seconds." },
-  identity: { angle: "identity", headline: "For builders, not bureaucrats", subheadline: "You're here to ship, not to file.", body: "For the founder who'd rather build than babysit a planning doc." },
-  aspiration: { angle: "aspiration", headline: "Launch the thing you keep almost starting", subheadline: "Idea to execution, closed.", body: "Your scattered notes, already next week's launch plan." },
-  convenience: { angle: "convenience", headline: "Paste notes. Get a plan.", subheadline: "No setup, no templates.", body: "Drop in whatever you've got. Get back a launch-ready plan." },
-  fomo: { angle: "fomo", headline: "Faster teams already shipped this week", subheadline: "Speed compounds.", body: "While planning eats your week, faster teams are iterating." },
-  objection_handling: { angle: "objection_handling", headline: "Think it can't handle your mess?", subheadline: "That's exactly what it's for.", body: "Half-formed bullets, voice memos, contradictions — all fair input." },
-  testimonial: { angle: "testimonial", headline: "\"Planned my launch before my coffee cooled\"", subheadline: "— an early user (illustrative)", body: "Paste a mess of notes, watch a usable plan appear." },
+const FALLBACKS: Record<string, Pick<Card, "angle" | "headline" | "subheadline" | "body"> & { register: string }> = {
+  social_proof: { angle: "social_proof", register: "informational", headline: "Used by thousands of early teams", subheadline: "Founders run their planning through FocusFlow.", body: "Teams paste raw notes and share the plan it builds. That's the common workflow." },
+  curiosity: { angle: "curiosity", register: "creative", headline: "What if your notes wrote the plan?", subheadline: "A faster path from idea to launch.", body: "Most tools make you do the structuring. FocusFlow flips that." },
+  cost_savings: { angle: "cost_savings", register: "direct", headline: "Reclaim ten hours a week", subheadline: "Planning shouldn't cost your build time.", body: "Every hour reformatting notes is an hour not building. Take it back." },
+  evidence: { angle: "evidence", register: "informational", headline: "Notes in, timeline out", subheadline: "Built for how founders actually think.", body: "FocusFlow reads unstructured notes and returns a structured timeline with milestones." },
+  identity: { angle: "identity", register: "direct", headline: "For builders, not bureaucrats", subheadline: "You're here to ship, not to file.", body: "For the founder who'd rather build than babysit a planning doc." },
+  aspiration: { angle: "aspiration", register: "creative", headline: "Launch the thing you keep almost starting", subheadline: "Idea to execution, closed.", body: "Your scattered notes, already next week's launch plan." },
+  convenience: { angle: "convenience", register: "plain", headline: "Paste notes. Get a plan.", subheadline: "No setup, no templates.", body: "Drop in whatever you've got. FocusFlow gives back a launch-ready plan." },
+  fomo: { angle: "fomo", register: "direct", headline: "Faster teams already shipped this week", subheadline: "Speed compounds.", body: "While planning eats your week, faster teams are iterating." },
+  objection_handling: { angle: "objection_handling", register: "conversational", headline: "Think it can't handle your mess?", subheadline: "That's exactly what it's for.", body: "Half-formed bullets, voice memos, contradictions — all fair input." },
+  testimonial: { angle: "testimonial", register: "conversational", headline: "\"Planned my launch before my coffee cooled\"", subheadline: "— an early user (illustrative)", body: "Paste a mess of notes, watch a usable plan appear." },
 };
 
 function pickAllowedAngles(ctx: AdaptContext): string[] {
@@ -152,7 +160,11 @@ function fallbackCard(allowed: string[]): Card {
   const angle = allowed[Math.floor(Math.random() * allowed.length)] ?? "curiosity";
   const base = FALLBACKS[angle] ?? FALLBACKS.curiosity;
   return {
-    ...base,
+    angle: base.angle,
+    register: base.register,
+    headline: base.headline,
+    subheadline: base.subheadline,
+    body: base.body,
     inferred_user_state: "Unknown — generation fell back to built-in content.",
     reasoning_summary: `Served a varied fallback for the ${angle} angle (no live model).`,
     analysis: "No live model — fallback content served.",
@@ -258,12 +270,12 @@ Write the JSON reflection.`;
     return "";
   }
 }
+
 // ── End-of-session profile (content × time × action) ─────────────────────────
 export interface ProfileInput {
   converted: boolean;
   ctaAngle: string | null;
   sessionLengthMs: number;
-  // The FULL timeline in order, including revisits — one entry per view.
   steps: {
     step: number;
     angle: string;
@@ -273,9 +285,9 @@ export interface ProfileInput {
     dwellMs: number;
     expectedReadMs: number;
     dwellRatio: number;
-    visitOrder: number;     // 1 = first time, 2+ = revisit
-    arrivedBy: string;      // start | down | up
-    outcome: string;        // advanced | scrolled_back_away | signed_up | closed | still_viewing
+    visitOrder: number;
+    arrivedBy: string;
+    outcome: string;
     reflection?: string;
   }[];
 }
@@ -314,7 +326,7 @@ Return ONLY a JSON object:
 "what_they_wanted": one layer of inference — what they seem to be looking for in a tool like this, from what held them.
 "what_didnt_click": the specific claims/phrasings they skimmed or left, with the time+action evidence.
 "converting_factor": the exact words/promise on the card that closed them (or, if they left, what was missing). Quote the card.
-"key_insights": 3-5 sharp, specific takeaways about the user, each linking content + time + action (e.g. "Spent 6s on 'turn voice memos into milestones' — well over a normal read — then signed up two cards later: concrete input→output mechanics are the hook").`;
+"key_insights": 3-5 sharp, specific takeaways, each linking content + time + action (e.g. "Spent 6s on 'turn voice memos into milestones' — well over a normal read — then signed up two cards later: concrete input→output mechanics are the hook").`;
 
 export async function buildSessionProfile(input: ProfileInput): Promise<SessionProfile | null> {
   const key = process.env.GEMINI_API_KEY;
