@@ -211,30 +211,37 @@ export function useSession() {
   const buildProfile = useCallback(
     async (ctaAngle: string | null, converted: boolean) => {
       setProfileLoading(true);
-      // Let in-flight per-card reflections land first.
       await new Promise((r) => setTimeout(r, 300));
       const recs = recordsRef.current;
       const evs = eventsRef.current;
       const m = computeMetrics(recs, evs, sessionStart.current, Date.now());
-      const firstVisitSteps = m.timeline.filter((s) => s.visitOrder === 1);
-      const cards = firstVisitSteps.map((s) => {
+      // Pass the FULL timeline — every view including revisits — so the model can
+      // reason about the content × time × action arc.
+      const steps = m.timeline.map((s) => {
         const rec = recs[s.cardIndex];
         const expected = expectedReadMs(rec.card.headline, rec.card.subheadline, rec.card.body);
-        const ratio = expected > 0 ? rec.dwellMs / expected : 0;
+        const ratio = expected > 0 ? s.dwellMs / expected : 0;
         return {
+          step: s.step,
           angle: s.angle,
           headline: s.headline,
-          subheadline: rec.card.subheadline,
-          body: rec.card.body,
-          dwellMs: Math.round(rec.dwellMs),
+          subheadline: s.subheadline,
+          body: s.body,
+          dwellMs: Math.round(s.dwellMs),
           expectedReadMs: expected,
           dwellRatio: ratio,
+          visitOrder: s.visitOrder,
+          arrivedBy: s.arrivedBy,
           outcome: s.outcome,
-          visits: rec.visits,
           reflection: rec.card.post_action_reflection,
         };
       });
-      const result = await buildSessionProfile({ converted, ctaAngle, cards });
+      const result = await buildSessionProfile({
+        converted,
+        ctaAngle,
+        sessionLengthMs: m.sessionLengthMs,
+        steps,
+      });
       setProfile(result);
       setProfileLoading(false);
     },

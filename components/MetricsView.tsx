@@ -81,6 +81,13 @@ export function MetricsView({
             </h3>
             <div className="space-y-3 rounded-xl border border-mist bg-white/70 px-4 py-3 text-sm leading-relaxed text-ink">
             <p>{profile.summary}</p>
+            {profile.key_insights.length > 0 && (
+                <ul className="list-disc space-y-1 pl-5 text-slatey">
+                {profile.key_insights.map((k, i) => (
+                    <li key={i}>{k}</li>
+                ))}
+                </ul>
+            )}
             <div className="grid gap-2 font-mono text-[11px] text-slatey">
                 <div><span className="text-ink">What they liked: </span>{profile.what_they_liked}</div>
                 <div><span className="text-ink">What they wanted: </span>{profile.what_they_wanted}</div>
@@ -89,7 +96,7 @@ export function MetricsView({
             </div>
             </div>
         </div>
-    )}
+        )}
 
       <h3 className="mb-2 mt-7 font-mono text-[11px] uppercase tracking-[0.16em] text-ember">
         Step-by-step ({metrics.timeline.length})
