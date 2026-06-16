@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRODUCT } from "@/lib/product";
-import { computeMetrics } from "@/lib/metrics";
+import { computeMetrics, expectedReadMs, dwellInterpretation } from "@/lib/metrics";
 import type { ActionEvent, AdaptContext, Card, CardRecord } from "@/types";
 
 type Phase = "intro" | "feed" | "converted" | "ended";
@@ -46,26 +46,45 @@ export function useSession() {
   );
 
   const buildContext = useCallback((recs: CardRecord[]): AdaptContext => {
-    const anglesUsed = recs.map((r) => String(r.card.angle));
-    const dwells = recs.map((r) => r.dwellMs);
-    return {
-      product: { name: PRODUCT.name, tagline: PRODUCT.tagline, cta: PRODUCT.cta },
-      history: recs.map((r) => ({
+  // Build a quick outcome lookup from the latest timeline.
+  const m = computeMetrics(recs, [], sessionStart.current, Date.now());
+  // Most recent outcome per card index (last visit wins).
+  const outcomeByCard: Record<number, string> = {};
+  for (const step of m.timeline) outcomeByCard[step.cardIndex] = step.outcome;
+
+  const anglesUsed = recs.map((r) => String(r.card.angle));
+  const dwells = recs.map((r) => r.dwellMs);
+
+  return {
+    product: { name: PRODUCT.name, tagline: PRODUCT.tagline, cta: PRODUCT.cta },
+    history: recs.map((r, i) => {
+      const expected = expectedReadMs(r.card.headline, r.card.subheadline, r.card.body);
+      const ratio = expected > 0 ? r.dwellMs / expected : 0;
+      return {
         angle: String(r.card.angle),
         headline: r.card.headline,
-        dwellMs: r.dwellMs,
+        body: r.card.body,
+        dwellMs: Math.round(r.dwellMs),
+        expectedReadMs: expected,
+        dwellRatio: Number(ratio.toFixed(2)),
+        dwellRead: dwellInterpretation(ratio),
         scrollDepth: r.scrollDepth,
         revisited: r.visits > 1,
-      })),
-      anglesUsed,
-      stats: {
-        cardsSeen: recs.length,
-        avgDwellMs: dwells.length ? dwells.reduce((a, b) => a + b, 0) / dwells.length : 0,
-        shortestDwellMs: dwells.length ? Math.min(...dwells) : null,
-        longestDwellMs: dwells.length ? Math.max(...dwells) : null,
-      },
-    };
-  }, []);
+        visits: r.visits,
+        outcome: outcomeByCard[i] ?? "unknown",
+        priorAnalysis: r.card.analysis,
+        priorReasoning: r.card.reasoning_summary,
+      };
+    }),
+    anglesUsed,
+    stats: {
+      cardsSeen: recs.length,
+      avgDwellMs: dwells.length ? dwells.reduce((a, b) => a + b, 0) / dwells.length : 0,
+      shortestDwellMs: dwells.length ? Math.min(...dwells) : null,
+      longestDwellMs: dwells.length ? Math.max(...dwells) : null,
+    },
+  };
+}, []);
 
   const fetchCard = useCallback(async (ctx: AdaptContext): Promise<Card> => {
     const res = await fetch("/api/generate", {

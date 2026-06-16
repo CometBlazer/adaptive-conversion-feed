@@ -55,9 +55,18 @@ export interface AdaptContext {
   history: {
     angle: string;
     headline: string;
+    body: string;
     dwellMs: number;
+    expectedReadMs: number;   // how long one read SHOULD take
+    dwellRatio: number;       // actual / expected
+    dwellRead: string;        // plain-language interpretation
     scrollDepth: number;
     revisited: boolean;
+    visits: number;
+    outcome: string;          // what the user did after this card
+    // the model's own prior intent, fed back for reflection:
+    priorAnalysis?: string;
+    priorReasoning?: string;
   }[];
   anglesUsed: string[];
   stats: {

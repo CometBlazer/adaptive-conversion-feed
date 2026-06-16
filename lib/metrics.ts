@@ -3,6 +3,33 @@ import type { ActionEvent, CardRecord } from "@/types";
 
 export const ENGAGED_DWELL_MS = 4000;
 
+// Average adult silent reading speed for non-fiction prose (words/minute).
+// From Brysbaert (2019) meta-analysis; a reasonable, well-cited baseline.
+export const READING_WPM = 238;
+
+export function wordsIn(...parts: string[]): number {
+  return parts
+    .join(" ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+// Expected time (ms) to read a card's full text once at average speed.
+export function expectedReadMs(headline: string, subheadline: string, body: string): number {
+  const words = wordsIn(headline, subheadline, body);
+  return Math.round((words / READING_WPM) * 60000);
+}
+
+// Turn a dwell/expected ratio into a plain-language engagement read.
+export function dwellInterpretation(ratio: number): string {
+  if (ratio < 0.4) return "skimmed or bounced (didn't finish one read)";
+  if (ratio < 0.85) return "read quickly (fast reader or light skim)";
+  if (ratio <= 1.6) return "read about once (normal engagement)";
+  if (ratio <= 2.8) return "read carefully or twice (held attention)";
+  return "very long (re-read many times, or left and returned — re-hook them)";
+}
+
 export type StepOutcome =
   | "advanced"
   | "scrolled_back_away"

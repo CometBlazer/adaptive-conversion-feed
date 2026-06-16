@@ -14,6 +14,13 @@ HOW TO READ THE BEHAVIORAL RECORD:
 - "quick advance" = left fast (under 4s); "engaged advance" = read it, then moved on. Engaged advances mean the message was understood but not yet convincing enough — escalate, don't repeat.
 - arrived_by / left_by (up/down) tells you their movement pattern. Lots of up-scrolling = comparing, deliberating.
 
+REFLECT BEFORE YOU WRITE — each prior card is shown as BEFORE (what you intended) and AFTER (what the visitor actually did). For each one, ask: did the outcome match my intent? The dwell RATIO is dwell vs. expected reading time:
+- ratio under ~0.4 = they didn't even finish one read — that framing failed to grab them, or they're a skimmer who needs a punchier hook.
+- ratio ~0.85–1.6 = they read it once. Normal. If they still advanced, the message landed but didn't convince — escalate or change lever.
+- ratio over ~2.8 = they lingered a long time. Either deeply engaged, OR they left and came back — if they then advanced without converting, you need a stronger, more direct hook to recapture them.
+A REVISIT is your strongest positive signal: that card's content worked. Lean into what made it work; do not abandon it.
+Your job: explicitly diagnose the last card's BEFORE-vs-AFTER in your analysis, then choose the next move as a reaction to it. Do NOT treat each card as a fresh start.
+
 REASON FIRST, THEN WRITE. In your analysis: name what has clearly NOT worked, name what (if anything) pulled attention, infer what kind of person this behavior suggests, and decide on a deliberately UNEXPECTED way in.
 
 BE CONCISE — THIS IS THE MOST IMPORTANT FORMATTING RULE:
@@ -42,22 +49,31 @@ OUTPUT: Return ONLY a JSON object, no markdown, with exactly these keys:
 // list, but curated so a small model reasons from signal, not raw noise.
 function buildSessionDigest(ctx: AdaptContext): string {
   if (!ctx.history.length) {
-    return "(First card. No behavioral data yet — open with something striking that earns the next scroll.)";
+    return "(FIRST card of the session. No behavioral data yet — open with something striking that earns the next scroll.)";
   }
 
-  const lines = ctx.history.map((h, i) => {
+  const blocks = ctx.history.map((h, i) => {
     const tags: string[] = [];
-    if (h.revisited) tags.push("REVISITED (pulled them back)");
-    if (h.dwellMs < 2000) tags.push("short dwell (bounced)");
-    else if (h.dwellMs > 6000) tags.push("long dwell (held attention)");
-    if (h.scrollDepth >= 0.8) tags.push("read fully");
-    else if (h.scrollDepth < 0.3) tags.push("barely read");
-    return `  Card ${i + 1} [${h.angle}]: dwell ${Math.round(h.dwellMs)}ms, scroll ${h.scrollDepth.toFixed(
+    if (h.revisited) tags.push(`REVISITED ${h.visits}x — it pulled them back, something resonated`);
+    const outcomeText =
+      h.outcome === "signed_up"
+        ? "they SIGNED UP here"
+        : h.outcome === "closed"
+        ? "they CLOSED the page here (lost them)"
+        : h.outcome === "scrolled_back_away"
+        ? "they scrolled back UP and away"
+        : h.outcome === "advanced"
+        ? "they scrolled down to the next card"
+        : "still viewing";
+
+    return `CARD ${i + 1} [${h.angle}] — "${h.headline}"
+  BEFORE (your intent): ${h.priorReasoning ?? "n/a"}
+  AFTER (what they did): dwell ${h.dwellMs}ms vs ~${h.expectedReadMs}ms expected to read it once (ratio ${h.dwellRatio} → ${h.dwellRead}); scroll depth ${h.scrollDepth.toFixed(
       2
-    )}${tags.length ? " — " + tags.join("; ") : ""}\n    headline: "${h.headline}"`;
+    )}; outcome: ${outcomeText}${tags.length ? "; " + tags.join("; ") : ""}`;
   });
 
-  return lines.join("\n");
+  return blocks.join("\n\n");
 }
 
 function buildUserPrompt(ctx: AdaptContext, allowedAngles: string[]): string {
