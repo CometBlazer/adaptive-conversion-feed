@@ -1,7 +1,9 @@
+// components/IntroScreen.tsx
 "use client";
 
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+
 
 export function IntroScreen({ onBegin }: { onBegin: () => void }) {
   return (
@@ -21,22 +23,25 @@ export function IntroScreen({ onBegin }: { onBegin: () => void }) {
           Research prototype
         </p>
         <h1 className="mt-4 font-display text-4xl leading-tight text-ink sm:text-5xl">
-          This page changes its mind about you.
+          This experiment is adaptive.
         </h1>
         <p className="mt-5 text-base leading-relaxed text-slatey">
           You&apos;re about to see a feed of sales pitches for a fictional product. After each one,
-          you can ask for another. The system watches how you engage and tries a different angle each
-          time, looking for what works on you.
+          either scroll down, scroll up, click the Call to Action button, or exit the experiment (x button in the top right corner). 
         </p>
         <p className="mt-3 text-base leading-relaxed text-slatey">
+          The fictional product you see is 
+        </p>
+        <p className="mt-3 text-base leading-relaxed text-slatey">
+          The system watches how you engage and tries a different angle each time, looking for what works on you. 
           Nothing you do here is sold, shared, or tied to your identity. It stays in your browser, and
-          you can export or discard it. This notice exists so the experiment is honest about what it is.
+          you can export or discard it. 
         </p>
         <div className="mt-8 flex items-center gap-4">
           <Button size="lg" onClick={onBegin}>
-            I understand — begin
+            I understand, continue.
           </Button>
-          <span className="font-mono text-xs text-slatey">No account. No tracking pixels.</span>
+          {/* <span className="font-mono text-xs text-slatey">No account. No tracking pixels.</span> */}
         </div>
       </motion.div>
     </motion.div>

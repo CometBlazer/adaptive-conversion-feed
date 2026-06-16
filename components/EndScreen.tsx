@@ -52,9 +52,9 @@ export function EndScreen({
                   Compiling…
                 </>
               ) : showMetrics ? (
-                "Hide research dashboard"
+                "Hide research metrics"
               ) : (
-                "View research dashboard"
+                "View research metrics"
               )}
             </Button>
           )}

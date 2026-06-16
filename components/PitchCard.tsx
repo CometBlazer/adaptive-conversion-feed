@@ -105,7 +105,7 @@ export function PitchCard({
             onClick={() => onCta(index)}
             className="h-14 px-9 text-base shadow-[0_18px_40px_-18px_rgba(58,91,224,0.7)]"
           >
-            Sign up for FocusFlow
+            Buy FocusFlow
           </Button>
         </div>
       </div>

@@ -3,7 +3,7 @@ import type { Angle } from "@/types";
 export const PRODUCT = {
   name: "FocusFlow",
   tagline: "An AI workspace that turns messy founder notes into launch-ready plans.",
-  cta: "Start FocusFlow",
+  cta: "Buy FocusFlow",
 } as const;
 
 // Human-readable labels for the research dashboard.
