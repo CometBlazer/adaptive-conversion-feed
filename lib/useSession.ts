@@ -16,10 +16,25 @@ export function useSession() {
 
   const sessionStart = useRef<number>(Date.now());
   const scrollDepth = useRef<Record<number, number>>({});
-  const activeIndex = useRef<number>(-1); // the card currently on screen
-  const activeSince = useRef<number>(0);  // when the active card became active
+  const activeIndex = useRef<number>(-1);
+  const activeSince = useRef<number>(0);
   const generating = useRef(false);
   const terminal = useRef(false);
+
+  // Synchronous mirror of `records`. Updated immediately whenever records change,
+  // so async work (prefetch context building) always reads the latest committed
+  // cards instead of a stale React snapshot.
+  const recordsRef = useRef<CardRecord[]>([]);
+
+  // Helper: apply an updater to BOTH the ref (synchronously) and state.
+  const updateRecords = useCallback(
+    (updater: (prev: CardRecord[]) => CardRecord[]) => {
+      const next = updater(recordsRef.current);
+      recordsRef.current = next;
+      setRecords(next);
+    },
+    []
+  );
 
   const since = useCallback(() => Date.now() - sessionStart.current, []);
 
@@ -62,29 +77,29 @@ export function useSession() {
     return data.card as Card;
   }, []);
 
-  const appendCard = useCallback((card: Card) => {
-    setRecords((prev) => [
-      ...prev,
-      {
-        card,
-        shownAt: Date.now() - sessionStart.current,
-        dwellMs: 0,
-        scrollDepth: 0,
-        visits: 0,
-        clickedCta: false,
-      },
-    ]);
-  }, []);
+  const appendCard = useCallback(
+    (card: Card) => {
+      updateRecords((prev) => [
+        ...prev,
+        {
+          card,
+          shownAt: Date.now() - sessionStart.current,
+          dwellMs: 0,
+          scrollDepth: 0,
+          visits: 0,
+          clickedCta: false,
+        },
+      ]);
+    },
+    [updateRecords]
+  );
 
   const prefetchNext = useCallback(async () => {
     if (generating.current || terminal.current) return;
     generating.current = true;
     setPrefetching(true);
-    let snapshot: CardRecord[] = [];
-    setRecords((prev) => {
-      snapshot = prev;
-      return prev;
-    });
+    // Read the latest committed cards synchronously — no stale snapshot.
+    const snapshot = recordsRef.current;
     const card = await fetchCard(buildContext(snapshot));
     appendCard(card);
     generating.current = false;
@@ -95,6 +110,9 @@ export function useSession() {
     terminal.current = false;
     activeIndex.current = -1;
     activeSince.current = 0;
+    recordsRef.current = [];
+    setRecords([]);
+    setEvents([]);
     setPhase("feed");
     sessionStart.current = Date.now();
     generating.current = true;
@@ -105,34 +123,32 @@ export function useSession() {
     setPrefetching(false);
   }, [buildContext, fetchCard, appendCard]);
 
-  // Commit accumulated dwell to a card's record.
-  const addDwell = useCallback((index: number, dwell: number) => {
-    if (dwell <= 0) return;
-    const depth = scrollDepth.current[index] ?? 0;
-    setRecords((prev) => {
-      if (!prev[index]) return prev;
-      const next = [...prev];
-      next[index] = {
-        ...next[index],
-        dwellMs: next[index].dwellMs + dwell,
-        scrollDepth: Math.max(next[index].scrollDepth, depth),
-      };
-      return next;
-    });
-  }, []);
+  const addDwell = useCallback(
+    (index: number, dwell: number) => {
+      if (dwell <= 0) return;
+      const depth = scrollDepth.current[index] ?? 0;
+      updateRecords((prev) => {
+        if (!prev[index]) return prev;
+        const next = [...prev];
+        next[index] = {
+          ...next[index],
+          dwellMs: next[index].dwellMs + dwell,
+          scrollDepth: Math.max(next[index].scrollDepth, depth),
+        };
+        return next;
+      });
+    },
+    [updateRecords]
+  );
 
-  // Single source of truth: the feed tells us which card is now the active one.
-  // We close out the previously-active card (dwell + exit direction) and open
-  // the new one (view or scroll_back, with arrival direction).
   const setActiveCard = useCallback(
     (index: number) => {
       if (terminal.current) return;
       const prev = activeIndex.current;
-      if (prev === index) return; // already active, nothing to do
+      if (prev === index) return;
 
       const now = Date.now();
 
-      // Close the previous card.
       if (prev !== -1) {
         const dwell = now - activeSince.current;
         addDwell(prev, dwell);
@@ -141,20 +157,18 @@ export function useSession() {
           logEvent({
             type: "advance",
             cardIndex: prev,
-            angle: String(records[prev]?.card.angle ?? ""),
+            angle: String(recordsRef.current[prev]?.card.angle ?? ""),
             dwellMs: dwell,
             direction: "down",
           });
         }
-        // (upward exit is implied by the next card's scroll_back arrival)
       }
 
-      // Open the new card.
       const arriveDir: "up" | "down" | "start" =
         prev === -1 ? "start" : index > prev ? "down" : "up";
 
       let isRevisit = false;
-      setRecords((p) => {
+      updateRecords((p) => {
         if (!p[index]) return p;
         const next = [...p];
         isRevisit = next[index].visits > 0;
@@ -167,13 +181,13 @@ export function useSession() {
           ? {
               type: "scroll_back",
               cardIndex: index,
-              angle: String(records[index]?.card.angle ?? ""),
+              angle: String(recordsRef.current[index]?.card.angle ?? ""),
               direction: "up",
             }
           : {
               type: "view",
               cardIndex: index,
-              angle: String(records[index]?.card.angle ?? ""),
+              angle: String(recordsRef.current[index]?.card.angle ?? ""),
               direction: arriveDir === "start" ? "down" : arriveDir,
             }
       );
@@ -182,35 +196,28 @@ export function useSession() {
       activeSince.current = now;
 
       // Prefetch when the last card becomes active.
-      setRecords((p) => {
-        if (index === p.length - 1) void prefetchNext();
-        return p;
-      });
+      if (index === recordsRef.current.length - 1) void prefetchNext();
     },
-    [addDwell, logEvent, records, prefetchNext]
+    [addDwell, logEvent, updateRecords, prefetchNext]
   );
 
-  // The trailing loading section became active (user out-scrolled the prefetch).
-  // Close out the previous real card's dwell, but don't log a view for the
-  // loader itself — it isn't a card. activeIndex parks at -1 until a real card
-  // takes over, so the next real card logs a correct arrival.
   const onLoadingActive = useCallback(() => {
     if (terminal.current) return;
     const prev = activeIndex.current;
-    if (prev !== -1 && records[prev]) {
+    if (prev !== -1 && recordsRef.current[prev]) {
       const dwell = Date.now() - activeSince.current;
       addDwell(prev, dwell);
       logEvent({
         type: "advance",
         cardIndex: prev,
-        angle: String(records[prev]?.card.angle ?? ""),
+        angle: String(recordsRef.current[prev]?.card.angle ?? ""),
         dwellMs: dwell,
         direction: "down",
       });
     }
     activeIndex.current = -1;
     activeSince.current = Date.now();
-  }, [addDwell, logEvent, records]);
+  }, [addDwell, logEvent]);
 
   const onScroll = useCallback((index: number, depth: number) => {
     scrollDepth.current[index] = Math.max(scrollDepth.current[index] ?? 0, depth);
@@ -225,11 +232,11 @@ export function useSession() {
     logEvent({
       type: "cta_click",
       cardIndex: idx,
-      angle: String(records[idx]?.card.angle ?? ""),
+      angle: String(recordsRef.current[idx]?.card.angle ?? ""),
       dwellMs: dwell,
     });
     setPhase("converted");
-  }, [addDwell, logEvent, records]);
+  }, [addDwell, logEvent]);
 
   const close = useCallback(() => {
     if (terminal.current) return;
@@ -240,13 +247,14 @@ export function useSession() {
     logEvent({
       type: "leave",
       cardIndex: idx,
-      angle: String(records[idx]?.card.angle ?? ""),
+      angle: String(recordsRef.current[idx]?.card.angle ?? ""),
       dwellMs: dwell,
     });
     setPhase("ended");
-  }, [addDwell, logEvent, records]);
+  }, [addDwell, logEvent]);
 
   const restart = useCallback(() => {
+    recordsRef.current = [];
     setRecords([]);
     setEvents([]);
     scrollDepth.current = {};
@@ -266,7 +274,7 @@ export function useSession() {
         {
           type: "leave",
           cardIndex: idx,
-          angle: String(records[idx]?.card.angle ?? ""),
+          angle: String(recordsRef.current[idx]?.card.angle ?? ""),
           at: Date.now() - sessionStart.current,
           dwellMs: dwell,
         },
@@ -274,7 +282,7 @@ export function useSession() {
     };
     window.addEventListener("beforeunload", onLeave);
     return () => window.removeEventListener("beforeunload", onLeave);
-  }, [phase, records]);
+  }, [phase]);
 
   const metrics = useMemo(
     () => computeMetrics(records, events, sessionStart.current, Date.now()),
