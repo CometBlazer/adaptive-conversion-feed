@@ -12,7 +12,8 @@ import { EndScreen } from "@/components/EndScreen";
 import { ResearchDashboard } from "@/components/ResearchDashboard";
 import { PRODUCT } from "@/lib/product";
 
-const IS_DEV = process.env.NODE_ENV !== "production";
+// const IS_DEV = process.env.NODE_ENV !== "production";
+const IS_DEV = true; 
 
 export default function Home() {
   const s = useSession();
