@@ -3,55 +3,71 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { AdaptContext, Card } from "@/types";
 import { ANGLES } from "@/types";
 
-const SYSTEM = `You generate ONE persuasive landing-page section for a fictional product, as part of an adaptive-persuasion experiment. The visitor scrolls a feed; each section tries a different tactic. The visitor has been told the page adapts to their behavior.
+const SYSTEM = `You generate ONE persuasive landing-page section for a fictional product, as part of an adaptive-persuasion experiment. The visitor scrolls a feed; each section tries a fresh tactic. The visitor has been told the page adapts to their behavior.
 
-Your job each turn is to do real analysis, then produce a section that is genuinely DIFFERENT from what came before — different angle, different structure, different length, different rhythm.
+Your job each turn: study the FULL behavioral record of the session so far, reason hard about what this specific person is responding to, and produce a section that is genuinely NEW — a different angle, a different shape, and a genuinely creative execution, not a textbook version of the angle.
 
-ANALYZE FIRST (this drives everything):
-- Look at dwell time and scroll depth per previous card. Short dwell + low scroll = that framing bounced off. Long dwell = it held attention but didn't convert. A revisit = something pulled them back.
-- Infer what KIND of buyer this behavior suggests and what they have NOT responded to yet.
-- Then deliberately pick a different lever.
+HOW TO READ THE BEHAVIORAL RECORD:
+- dwell = how long they stayed on a card. Long dwell = it held them. Short dwell = it bounced off.
+- scrollDepth = how far they read. High depth + short dwell = skimmed and left; low depth = barely looked.
+- revisits = they scrolled BACK to a card. That card pulled them back — something there resonated. Mine it.
+- "quick advance" = left fast (under 4s); "engaged advance" = read it, then moved on. Engaged advances mean the message was understood but not yet convincing enough — escalate, don't repeat.
+- arrived_by / left_by (up/down) tells you their movement pattern. Lots of up-scrolling = comparing, deliberating.
+
+REASON FIRST, THEN WRITE. In your analysis: name what has clearly NOT worked, name what (if anything) pulled attention, infer what kind of person this behavior suggests, and decide on a deliberately UNEXPECTED way in.
 
 HARD RULES:
-- You MUST use one of the ALLOWED ANGLES provided in the user message. Do not reuse an angle already used. This is non-negotiable.
-- VARY THE FORM every time. Rotate deliberately between: a punchy 1-2 sentence body; a longer narrative paragraph; a problem→solution structure; a single provocative question; a concrete scenario; a crisp factual claim. Never reuse the previous card's sentence structure or length.
-- Vary headline length too: sometimes 3 words, sometimes 10. Don't always start with a verb.
-- Stay truthful about a fictional product. No fabricated statistics, named customers, or fake scarcity. No exploiting fear or insecurity.
-- Be concrete and specific to FocusFlow, not generic SaaS filler. Avoid the words "chaos", "chaotic", "messy", "transform", "roadmap" if a prior card already used them — find fresh language.
+- Use exactly one of the ALLOWED ANGLES given in the user message. Never reuse a used angle.
+- Be CREATIVE within the angle. Avoid clichés and the obvious execution. Surprise the reader: an unusual opening, a concrete vivid detail, an unexpected framing, a sharp turn of phrase. Do not sound like generic SaaS copy.
+- VARY THE FORM hard from the previous cards: rotate between a punchy 1-2 sentence hit, a longer narrative, a problem→twist, a single provocative question, a concrete mini-scenario, a blunt factual claim. Never echo the previous card's structure, length, or rhythm.
+- Never reuse a distinctive word or image a previous card already used. Find fresh language.
+- Truthful about a fictional product. No fabricated stats, named customers, or fake scarcity. No exploiting fear or insecurity.
 
 OUTPUT: Return ONLY a JSON object, no markdown, with exactly these keys:
-{"analysis": string, "angle": string, "headline": string, "subheadline": string, "body": string, "inferred_user_state": string, "reasoning_summary": string}
+{"analysis": string, "avoided": string, "angle": string, "headline": string, "subheadline": string, "body": string, "inferred_user_state": string, "reasoning_summary": string}
 
-"analysis": 2-3 sentences reasoning about the behavioral signals and what to try next. Think here before you write the card.
-"inferred_user_state": one sentence on what the behavior suggests about the visitor.
-"reasoning_summary": one sentence on why this angle and form, given the analysis.`;
+"analysis": 2-4 sentences reasoning from the behavioral record before you write.
+"avoided": one sentence naming the specific patterns/words/structures from prior cards you are deliberately NOT repeating.
+"inferred_user_state": one sentence on what the behavior suggests about this visitor.
+"reasoning_summary": one sentence on why this angle + this creative execution, given the record.`;
 
-function buildUserPrompt(ctx: AdaptContext, allowedAngles: string[]): string {
-  const priorForms = ctx.history.length
-    ? ctx.history
-        .map(
-          (h, i) =>
-            `${i + 1}. angle=${h.angle} | dwell=${Math.round(h.dwellMs)}ms | scroll=${h.scrollDepth.toFixed(
-              2
-            )}${h.revisited ? " | REVISITED" : ""} | headline: "${h.headline}"`
-        )
-        .join("\n")
-    : "(this is the first card — open strong, no history yet)";
+// A compact, model-readable digest of the session — richer than the old history
+// list, but curated so a small model reasons from signal, not raw noise.
+function buildSessionDigest(ctx: AdaptContext): string {
+  if (!ctx.history.length) {
+    return "(First card. No behavioral data yet — open with something striking that earns the next scroll.)";
+  }
 
-  return `Product: ${ctx.product.name} — ${ctx.product.tagline}
-CTA label: ${ctx.product.cta}
+  const lines = ctx.history.map((h, i) => {
+    const tags: string[] = [];
+    if (h.revisited) tags.push("REVISITED (pulled them back)");
+    if (h.dwellMs < 2000) tags.push("short dwell (bounced)");
+    else if (h.dwellMs > 6000) tags.push("long dwell (held attention)");
+    if (h.scrollDepth >= 0.8) tags.push("read fully");
+    else if (h.scrollDepth < 0.3) tags.push("barely read");
+    return `  Card ${i + 1} [${h.angle}]: dwell ${Math.round(h.dwellMs)}ms, scroll ${h.scrollDepth.toFixed(
+      2
+    )}${tags.length ? " — " + tags.join("; ") : ""}\n    headline: "${h.headline}"`;
+  });
 
-ALLOWED ANGLES (you MUST choose exactly one, none repeated): ${allowedAngles.join(", ")}
-
-Session stats: ${JSON.stringify(ctx.stats)}
-
-Previous cards (oldest first):
-${priorForms}
-
-Recall the form/length/structure of the previous cards above and make THIS one clearly different. Analyze the behavioral signals, then return the JSON object only.`;
+  return lines.join("\n");
 }
 
-function isValidCard(obj: unknown): obj is Card & { analysis?: string } {
+function buildUserPrompt(ctx: AdaptContext, allowedAngles: string[]): string {
+  return `Product: ${ctx.product.name} — ${ctx.product.tagline}
+CTA: ${ctx.product.cta}
+
+ALLOWED ANGLES (choose exactly one, none repeated): ${allowedAngles.join(", ")}
+
+Session-wide signal: ${JSON.stringify(ctx.stats)}
+
+BEHAVIORAL RECORD (oldest first — reason from this):
+${buildSessionDigest(ctx)}
+
+Study the record above. Name what hasn't worked and what (if anything) resonated, then craft a section with a NEW allowed angle and a genuinely creative, unexpected execution that breaks from the patterns above. Return the JSON object only.`;
+}
+
+function isValidCard(obj: unknown): obj is Card {
   if (!obj || typeof obj !== "object") return false;
   const o = obj as Record<string, unknown>;
   return (
@@ -64,7 +80,7 @@ function isValidCard(obj: unknown): obj is Card & { analysis?: string } {
   );
 }
 
-// Deterministic, VARIED fallbacks so no-key testing doesn't look monotonous.
+// Varied fallbacks (one per angle) so no-key testing looks like a real session.
 const FALLBACKS: Record<string, Omit<Card, "inferred_user_state" | "reasoning_summary">> = {
   social_proof: {
     angle: "social_proof",
@@ -76,7 +92,7 @@ const FALLBACKS: Record<string, Omit<Card, "inferred_user_state" | "reasoning_su
     angle: "curiosity",
     headline: "What if your notes wrote the plan?",
     subheadline: "There's a faster path from idea to launch.",
-    body: "Most planning tools make you do the structuring. FocusFlow flips that. Curious how?",
+    body: "Most tools make you do the structuring. FocusFlow flips that. Curious how?",
   },
   cost_savings: {
     angle: "cost_savings",
@@ -86,9 +102,9 @@ const FALLBACKS: Record<string, Omit<Card, "inferred_user_state" | "reasoning_su
   },
   evidence: {
     angle: "evidence",
-    headline: "From brain-dump to milestones, measurably faster",
+    headline: "Brain-dump to milestones, measurably faster",
     subheadline: "Built for how founders actually think.",
-    body: "FocusFlow reads unstructured notes and outputs structured timelines — the same task that takes a person an afternoon.",
+    body: "FocusFlow reads unstructured notes and outputs structured timelines — the task that takes a person an afternoon.",
   },
   identity: {
     angle: "identity",
@@ -100,7 +116,7 @@ const FALLBACKS: Record<string, Omit<Card, "inferred_user_state" | "reasoning_su
     angle: "aspiration",
     headline: "Launch the thing you keep almost starting",
     subheadline: "The gap between idea and execution, closed.",
-    body: "Picture your scattered notes already becoming next week's launch plan. That's the default with FocusFlow.",
+    body: "Picture your scattered notes already becoming next week's launch plan. That's the default here.",
   },
   convenience: {
     angle: "convenience",
@@ -110,15 +126,15 @@ const FALLBACKS: Record<string, Omit<Card, "inferred_user_state" | "reasoning_su
   },
   fomo: {
     angle: "fomo",
-    headline: "Your competitors already shipped this week",
+    headline: "Faster teams already shipped this week",
     subheadline: "Speed compounds.",
-    body: "While planning eats your week, faster teams are already iterating. FocusFlow keeps you in the race.",
+    body: "While planning eats your week, faster teams are iterating. FocusFlow keeps you in the race.",
   },
   objection_handling: {
     angle: "objection_handling",
     headline: "Worried it won't get your messy notes?",
     subheadline: "That's exactly what it's built for.",
-    body: "Half-formed bullet points, voice memos, contradictory ideas — FocusFlow is designed for real, imperfect input.",
+    body: "Half-formed bullets, voice memos, contradictory ideas — FocusFlow is designed for real, imperfect input.",
   },
   testimonial: {
     angle: "testimonial",
@@ -131,7 +147,6 @@ const FALLBACKS: Record<string, Omit<Card, "inferred_user_state" | "reasoning_su
 function pickAllowedAngles(ctx: AdaptContext): string[] {
   const used = new Set(ctx.anglesUsed.map(String));
   const remaining = ANGLES.filter((a) => !used.has(a));
-  // If everything's been used, allow all again (a long session).
   return remaining.length ? remaining : [...ANGLES];
 }
 
@@ -158,13 +173,12 @@ export async function generateCard(
       model: "gemini-flash-lite-latest",
       generationConfig: {
         responseMimeType: "application/json",
-        temperature: 1.15,
-        topP: 0.95,
+        temperature: 1.2,
+        topP: 0.97,
       },
       systemInstruction: SYSTEM,
     });
 
-    // Up to 2 attempts: retry if the model repeats a used angle.
     for (let attempt = 0; attempt < 2; attempt++) {
       const result = await model.generateContent(buildUserPrompt(ctx, allowed));
       const text = result.response.text().trim();
@@ -178,13 +192,10 @@ export async function generateCard(
       if (!isValidCard(parsed)) continue;
 
       const card = parsed as Card;
-      // Enforce the angle constraint in code, not just in the prompt.
       if (!allowed.includes(String(card.angle))) {
-        if (attempt === 0) continue; // retry once
-        card.angle = allowed[0]; // last resort: snap to an allowed angle
+        if (attempt === 0) continue;
+        card.angle = allowed[0];
       }
-      // Strip the analysis field from what we store (keep card clean), but it
-      // already did its job by being generated before the rest.
       return { card, usedFallback: false };
     }
 
