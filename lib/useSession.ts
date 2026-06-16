@@ -224,6 +224,8 @@ export function useSession() {
         return {
           angle: s.angle,
           headline: s.headline,
+          subheadline: rec.card.subheadline,
+          body: rec.card.body,
           dwellMs: Math.round(rec.dwellMs),
           expectedReadMs: expected,
           dwellRatio: ratio,

@@ -259,13 +259,15 @@ Write the JSON reflection.`;
   }
 }
 
-// ── End-of-session profile ───────────────────────────────────────────────────
+// ── End-of-session profile (content-focused) ─────────────────────────────────
 export interface ProfileInput {
   converted: boolean;
   ctaAngle: string | null;
   cards: {
     angle: string;
     headline: string;
+    subheadline: string;
+    body: string;
     dwellMs: number;
     expectedReadMs: number;
     dwellRatio: number;
@@ -277,28 +279,34 @@ export interface ProfileInput {
 
 export interface SessionProfile {
   summary: string;
-  traits: string[];
-  what_worked: string;
-  what_didnt: string;
+  what_they_liked: string;
+  what_they_wanted: string;
+  what_didnt_click: string;
   converting_factor: string;
 }
 
-const PROFILE_SYSTEM = `You are the analyst closing out an adaptive-persuasion session. Build a SHORT, grounded profile of this one visitor based ONLY on how they behaved across the cards.
+const PROFILE_SYSTEM = `You are the analyst closing out a session. A visitor scrolled a feed of persuasive cards about a product (FocusFlow) and either signed up or left. Build a SHORT, grounded read of what about the PRODUCT and the SPECIFIC MESSAGING drew them in or pushed them away.
+
+FOCUS ON CONTENT, NOT TACTICS. Do NOT talk about "angles" or "the aspiration framing." Talk about the actual claims, promises, words, and ideas in the cards. What did this person seem to WANT from the product? What specific promise or phrasing made them linger or sign up? What claims did they skim past or ignore?
+
+Anchor everything in the cards' real wording. Examples of the RIGHT level:
+- "They lingered longest on the card promising to turn voice memos into milestones — the concrete 'paste it and get a plan back' mechanic seems to be what they want, more than big-picture vision."
+- "They skimmed past the 'build an empire' and 'stop being an amateur' messaging fast — grand or identity-flattering claims didn't land; they wanted to know what it DOES."
+- "Signed up on the card that gave a specific time ('six seconds to a roadmap') — a concrete, measurable outcome closed them where vaguer promises didn't."
 
 STRICT RULES:
-- Every claim must point to specific evidence from the session (a dwell ratio, a revisit, an outcome, which angle converted). If you can't tie it to an observed behavior, don't say it.
-- ONE layer of inference only. "They lingered on evidence and converted there → convinced by concrete mechanics" is fine. Do NOT chain further ("...therefore they're an engineer who distrusts marketing and probably..."). No spiraling.
-- Stay about THIS USER in relation to THIS PRODUCT and these messages. NO demographic guessing (age, job title, location, income), no personality typing beyond what the behavior shows, no unrelated speculation.
-- Be honest and concrete. If the signal is thin, say the read is tentative.
+- Tie every claim to specific card wording and a behavior (dwell, revisit, outcome). Quote or paraphrase the actual card text.
+- ONE layer of inference only. "They lingered on the concrete-mechanic card → they want to know exactly what it does" is fine. Do NOT spiral into demographics, job titles, or personality types.
+- Be about THIS USER's apparent wants/reactions in relation to THIS PRODUCT's actual messaging. No unrelated speculation.
 
 Return ONLY a JSON object:
-{"summary": string, "traits": string[], "what_worked": string, "what_didnt": string, "converting_factor": string}
+{"summary": string, "what_they_liked": string, "what_they_wanted": string, "what_didnt_click": string, "converting_factor": string}
 
-"summary": 2-3 sentences characterizing how this visitor engaged and what persuaded (or lost) them.
-"traits": 2-4 short statements, each grounded in a specific behavior, with the evidence in parentheses.
-"what_worked": the angle(s)/framing that pulled them forward, with the evidence.
-"what_didnt": the angle(s)/framing they bounced off, with the evidence.
-"converting_factor": if they converted, the specific card/angle and why it likely closed them; if not, what lost them. One sentence.`;
+"summary": 2-3 sentences on what this visitor seemed to want from FocusFlow and what messaging resonated, grounded in the card content.
+"what_they_liked": the specific product claims/promises/wording they engaged with most, with the evidence (which card, what it said, how they behaved).
+"what_they_wanted": one layer of inference — what they seem to be looking for in a tool like this, based on what held them.
+"what_didnt_click": the specific claims or phrasings they skimmed or ignored, with evidence.
+"converting_factor": if they converted, the specific words/promise on that card that likely closed them; if not, what was missing. One sentence quoting the card.`;
 
 export async function buildSessionProfile(input: ProfileInput): Promise<SessionProfile | null> {
   const key = process.env.GEMINI_API_KEY;
@@ -307,19 +315,17 @@ export async function buildSessionProfile(input: ProfileInput): Promise<SessionP
     const sorted = [...input.cards].sort((a, b) => b.dwellRatio - a.dwellRatio);
     const best = sorted[0];
     const worst = sorted[sorted.length - 1];
+    const signupCard = input.cards.find((c) => c.outcome === "signed_up");
     return {
       summary: input.converted
-        ? `Visitor moved through ${input.cards.length} cards and converted on the ${input.ctaAngle} angle, engaging fastest with concrete framing.`
-        : `Visitor viewed ${input.cards.length} cards without converting, advancing quickly through each.`,
-      traits: [
-        best ? `Engaged most with the ${best.angle} angle (highest dwell ratio ${best.dwellRatio.toFixed(2)}).` : "",
-        worst && worst !== best ? `Bounced off the ${worst.angle} angle (lowest dwell ratio ${worst.dwellRatio.toFixed(2)}).` : "",
-      ].filter(Boolean),
-      what_worked: best ? `The ${best.angle} framing held attention longest.` : "Unclear.",
-      what_didnt: worst ? `The ${worst.angle} framing was skimmed fastest.` : "Unclear.",
+        ? `Visitor signed up after the card reading "${signupCard?.headline ?? ""}". They engaged most with concrete, specific promises.`
+        : `Visitor left without converting, moving quickly through every card's messaging.`,
+      what_they_liked: best ? `Engaged most with "${best.headline}" — "${best.body}"` : "Thin signal.",
+      what_they_wanted: best ? `Seems to want what that card promised most directly.` : "Unclear from the signal.",
+      what_didnt_click: worst ? `Skimmed past "${worst.headline}" fastest.` : "Unclear.",
       converting_factor: input.converted
-        ? `Converted on ${input.ctaAngle} — concrete framing closed them.`
-        : "Did not convert.",
+        ? `The signup card's specific promise ("${signupCard?.body ?? ""}") closed them.`
+        : "Nothing closed them.",
     };
   }
 
@@ -334,28 +340,32 @@ export async function buildSessionProfile(input: ProfileInput): Promise<SessionP
     const cardLines = input.cards
       .map(
         (c, i) =>
-          `Card ${i + 1} [${c.angle}] "${c.headline}": dwell ${c.dwellMs}ms vs ~${c.expectedReadMs}ms (ratio ${c.dwellRatio.toFixed(
+          `Card ${i + 1} [${c.angle}]
+  Headline: "${c.headline}"
+  Subheadline: "${c.subheadline}"
+  Body: "${c.body}"
+  Behavior: dwell ${c.dwellMs}ms vs ~${c.expectedReadMs}ms (ratio ${c.dwellRatio.toFixed(
             2
           )}), visits ${c.visits}, outcome ${c.outcome}${c.reflection ? ` — reflection: ${c.reflection}` : ""}`
       )
-      .join("\n");
+      .join("\n\n");
 
     const prompt = `Session outcome: ${input.converted ? `CONVERTED on the "${input.ctaAngle}" angle` : "did NOT convert"}.
 
 Cards shown, in order:
 ${cardLines}
 
-Build the grounded JSON profile. Tie every claim to the evidence above.`;
+Build the grounded JSON profile, focused on the PRODUCT CONTENT and wording that drew them in or pushed them away. Tie every claim to the actual card text and the behavior above.`;
 
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
     const parsed = JSON.parse(text);
-    if (typeof parsed.summary !== "string" || !Array.isArray(parsed.traits)) return null;
+    if (typeof parsed.summary !== "string") return null;
     return {
       summary: parsed.summary,
-      traits: parsed.traits.map(String),
-      what_worked: String(parsed.what_worked ?? ""),
-      what_didnt: String(parsed.what_didnt ?? ""),
+      what_they_liked: String(parsed.what_they_liked ?? ""),
+      what_they_wanted: String(parsed.what_they_wanted ?? ""),
+      what_didnt_click: String(parsed.what_didnt_click ?? ""),
       converting_factor: String(parsed.converting_factor ?? ""),
     };
   } catch {
