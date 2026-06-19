@@ -11,8 +11,9 @@ export function IntroScreen({ onBegin }: { onBegin: () => void }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-paper/95 px-6 backdrop-blur-sm"
+      className="fixed inset-0 z-50 overflow-y-auto bg-paper/95 backdrop-blur-sm"
     >
+      <div className="flex min-h-full items-center justify-center px-5 py-10 sm:px-6 sm:py-12">
       <motion.div
         initial={{ y: 12, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -23,7 +24,7 @@ export function IntroScreen({ onBegin }: { onBegin: () => void }) {
           Research prototype
         </p>
 
-        <h1 className="mt-4 font-display text-4xl leading-tight text-ink sm:text-5xl">
+        <h1 className="mt-4 font-display text-3xl leading-tight text-ink sm:text-5xl">
           This experiment is adaptive.
         </h1>
 
@@ -58,11 +59,12 @@ export function IntroScreen({ onBegin }: { onBegin: () => void }) {
         </p>
 
         <div className="mt-8 flex items-center gap-4">
-          <Button size="lg" onClick={onBegin}>
+          <Button size="lg" onClick={onBegin} className="w-full sm:w-auto">
             I understand, continue.
           </Button>
         </div>
       </motion.div>
+      </div>
     </motion.div>
   );
 }

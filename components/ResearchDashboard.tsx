@@ -58,7 +58,7 @@ export function ResearchDashboard({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 360, opacity: 0 }}
             transition={{ type: "spring", damping: 26, stiffness: 240 }}
-            className="fixed right-0 top-0 z-40 flex h-full w-[340px] flex-col border-l border-mist bg-paper/98 backdrop-blur"
+            className="fixed right-0 top-0 z-40 flex h-full w-full max-w-[340px] flex-col border-l border-mist bg-paper/98 backdrop-blur"
           >
             <div className="flex items-center justify-between border-b border-mist px-4 py-3">
               <div className="flex items-center gap-2">

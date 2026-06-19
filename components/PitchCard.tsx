@@ -78,28 +78,28 @@ export function PitchCard({
         </svg>
       </div>
 
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-8 text-center">
+      <div className="relative mx-auto flex max-h-[100svh] w-full max-w-3xl flex-col items-center overflow-y-auto px-6 py-20 text-center sm:px-8">
         <span
-          className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.22em]"
+          className="inline-flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.22em] sm:text-xs"
           style={{ color: hue }}
         >
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: hue }} />
           {angleLabel(card.angle)}
         </span>
 
-        <h2 className="mt-8 max-w-3xl font-display text-3xl font-medium leading-[1.05] tracking-tight text-ink sm:text-4xl md:text-6xl">
+        <h2 className="mt-6 max-w-3xl font-display text-[1.75rem] font-medium leading-[1.08] tracking-tight text-ink sm:mt-8 sm:text-4xl md:text-6xl">
           {card.headline}
         </h2>
 
-        <p className="mt-7 max-w-2xl font-display text-2xl leading-snug text-slatey sm:text-3xl">
+        <p className="mt-5 max-w-2xl font-display text-xl leading-snug text-slatey sm:mt-7 sm:text-3xl">
           {card.subheadline}
         </p>
 
-        <p className="mt-8 max-w-xl text-md leading-relaxed text-ink/75 sm:text-lg">
+        <p className="mt-6 max-w-xl text-base leading-relaxed text-ink/75 sm:mt-8 sm:text-lg">
           {card.body}
         </p>
 
-        <div className="mt-12">
+        <div className="mt-9 sm:mt-12">
           <Button
             size="lg"
             onClick={() => onCta(index)}
