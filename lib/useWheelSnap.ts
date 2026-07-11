@@ -1,4 +1,3 @@
-// lib/useWheelSnap.ts
 "use client";
 
 import { useEffect, RefObject } from "react";

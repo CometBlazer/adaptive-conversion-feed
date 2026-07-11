@@ -1,4 +1,3 @@
-// components/EndScreen.tsx
 "use client";
 
 import { useState } from "react";

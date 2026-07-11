@@ -1,4 +1,3 @@
-// components/ui/soft-gradient-background-animation.tsx
 "use client";
 import React, { useEffect } from "react";
 

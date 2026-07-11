@@ -1,4 +1,3 @@
-// components/FullJsonBlock.tsx
 "use client";
 
 import { useState } from "react";

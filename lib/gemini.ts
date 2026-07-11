@@ -1,4 +1,7 @@
-// lib/gemini.ts
+// All model calls (server-side only). Three jobs: generate the next card from
+// the behavioral record, write a post-action reflection on a finished card,
+// and build the end-of-session profile. Every path degrades to deterministic
+// fallbacks when no GEMINI_API_KEY is configured, so the demo always runs.
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { AdaptContext, Card } from "@/types";
 import { ANGLES } from "@/types";

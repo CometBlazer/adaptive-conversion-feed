@@ -1,4 +1,3 @@
-// components/ConvertedScreen.tsx
 "use client";
 
 import { useState } from "react";

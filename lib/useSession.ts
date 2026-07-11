@@ -1,15 +1,14 @@
-// lib/useSession.ts
 "use client";
 
+// The session engine. Tracks which card is on screen and for how long
+// (dwell, scroll depth, revisits), logs every action, asks the server for the
+// next card when the visitor nears the end of the feed, and triggers the
+// post-action reflections and end-of-session profile. All model calls go
+// through API routes; this hook only measures and orchestrates.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRODUCT } from "@/lib/product";
 import { computeMetrics, expectedReadMs, dwellInterpretation } from "@/lib/metrics";
-import {
-  reflectOnAction,
-  buildSessionProfile,
-  type ReflectionInput,
-  type SessionProfile,
-} from "@/lib/gemini";
+import type { ReflectionInput, SessionProfile } from "@/lib/gemini";
 import type { ActionEvent, AdaptContext, Card, CardRecord } from "@/types";
 
 type Phase = "intro" | "feed" | "converted" | "ended";
@@ -192,7 +191,17 @@ export function useSession() {
         outcome,
         visits: rec.visits,
       };
-      const reflection = await reflectOnAction(input);
+      let reflection = "";
+      try {
+        const res = await fetch("/api/reflect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        reflection = (await res.json()).reflection ?? "";
+      } catch {
+        return; // reflections are best-effort; the record just goes without one
+      }
       if (!reflection) return;
       updateRecords((prev) => {
         if (!prev[index]) return prev;
@@ -236,12 +245,22 @@ export function useSession() {
           reflection: rec.card.post_action_reflection,
         };
       });
-      const result = await buildSessionProfile({
-        converted,
-        ctaAngle,
-        sessionLengthMs: m.sessionLengthMs,
-        steps,
-      });
+      let result: SessionProfile | null = null;
+      try {
+        const res = await fetch("/api/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            converted,
+            ctaAngle,
+            sessionLengthMs: m.sessionLengthMs,
+            steps,
+          }),
+        });
+        result = (await res.json()).profile ?? null;
+      } catch {
+        result = null;
+      }
       setProfile(result);
       setProfileLoading(false);
     },

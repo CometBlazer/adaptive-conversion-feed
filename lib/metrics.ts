@@ -1,4 +1,3 @@
-// lib/metrics.ts
 import type { ActionEvent, CardRecord } from "@/types";
 
 export const ENGAGED_DWELL_MS = 4000;

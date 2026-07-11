@@ -1,4 +1,3 @@
-// types/index.ts
 export const ANGLES = [
   "social_proof",
   "convenience",

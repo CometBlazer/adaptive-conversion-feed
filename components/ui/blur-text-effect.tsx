@@ -1,4 +1,3 @@
-// components/ui/blur-text-effect.tsx
 "use client";
 import React, { useLayoutEffect, useRef } from "react";
 import gsap from "gsap";
